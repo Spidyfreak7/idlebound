@@ -1,0 +1,12 @@
+{
+  "name": "Idlebound.Foundation.Tests",
+  "references": [
+    "Idlebound.Foundation"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

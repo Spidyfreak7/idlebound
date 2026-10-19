@@ -1,11 +1,11 @@
 # Development progress
 
-Statuses describe verified work only. Detailed scopes for stages 8B–8H have not been supplied and remain undefined.
+Statuses describe verified work only. Stage 8B-01 scope is recorded in Stage8B01Verification.md. Detailed scopes for later batches and stages 8C–8H remain undefined.
 
 | Stage | Initial status | Evidence / next step |
 | --- | --- | --- |
 | 8A | In progress | 8A-04 repository/static verification and foundation documentation completed; local Unity compilation, scene, and mobile validation pending. Other 8A work is not assessed here. |
-| 8B | Not started | Await approved scope. |
+| 8B | In progress | 8B-01 core state, development UI, and EditMode tests added; Unity compilation and runtime validation pending. See Stage8B01Verification.md. |
 | 8C | Not started | Await approved scope. |
 | 8D | Not started | Await approved scope. |
 | 8E | Not started | Await approved scope. |

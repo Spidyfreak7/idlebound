@@ -8,7 +8,7 @@ Supabase is the planned backend. Its integration is future work: there is no bac
 
 ## Current repository
 
-The repository contains the Universal 2D foundation: SampleScene, rendering settings, input actions, a Lit 2D scene template, package definitions, and Unity project configuration. No project-authored C# gameplay systems are present. Documentation is stored outside Assets in `Docs`.
+The repository contains the Universal 2D foundation: SampleScene, rendering settings, input actions, a Lit 2D scene template, package definitions, and Unity project configuration. The Stage 8A presentation harness and Stage 8B-01 core foundation are present. `Assets/Foundation/Core` separates state and definitions from the development UI and Editor tests. No XP generation or backend integration exists. Documentation is stored outside Assets in `Docs`; see `Stage8B01Verification.md` for prototype constraints and pending design specifications.
 
 ## Future data-driven direction
 

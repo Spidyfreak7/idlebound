@@ -1,0 +1,6 @@
+{
+  "name": "Idlebound.Foundation.Development",
+  "references": [
+    "Idlebound.Foundation"
+  ]
+}
