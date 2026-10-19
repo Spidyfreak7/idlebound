@@ -53,7 +53,8 @@ namespace Idlebound.TestScene
 
         private void Update()
         {
-            elapsed += Time.unscaledDeltaTime;
+            // Keep the timer within one cycle to avoid long-session float precision loss.
+            elapsed = Mathf.Repeat(elapsed + Time.unscaledDeltaTime, 4f);
             character.anchoredPosition = new Vector2(0, Mathf.Sin(elapsed * Mathf.PI * 0.5f) * 8);
         }
 
