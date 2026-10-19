@@ -1,0 +1,8 @@
+# DEVELOPMENT ONLY. All quantities/requirements/XP are unapproved fixtures. Not production balancing.
+# id,name,skill,category,outputId,outputName,outputQuantity,inputs,requiredLevel,seconds,XP-or-TBD,status,source
+# 15s equipment and 5s tier-one cooking durations match S2 tier examples; that does NOT approve these recipes.
+dev-bronze-blade,[DEV] Bronze practice blade,smithing,MetalWeapon,dev-blade,[DEV] Practice blade,1,metal-1:2,1,15,100000,development,Stage8B03 fixture
+dev-wood-bow,[DEV] Wood practice bow,crafting,RangedWeapon,dev-bow,[DEV] Practice bow,1,wood-1:2,1,15,100000,development,Stage8B03 fixture
+dev-wood-wand,[DEV] Wood practice wand,crafting,MagicWeapon,dev-wand,[DEV] Practice wand,1,wood-1:2,1,15,100000,development,Stage8B03 fixture
+dev-crossbow,[DEV] Mixed-material practice crossbow,crafting,RangedWeapon,dev-crossbow-item,[DEV] Practice crossbow,1,wood-1:1;metal-1:1,1,15,100000,development,Stage8B03 fixture
+dev-shrimp-meal,[DEV] Shrimp practice meal,cooking,Food,dev-meal,[DEV] Practice meal,1,fish-1:1,1,5,100000,development,Stage8B03 fixture

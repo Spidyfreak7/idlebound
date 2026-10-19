@@ -14,6 +14,10 @@ namespace Idlebound.Foundation.Development
         private string message = "Gathering ready. Production XP/action is unresolved; XP stays zero by default.";
         private string tierData;
         private string xpData;
+        private string productionData;
+        private string developmentProductionData;
+        private bool developmentRecipes;
+        private string productionFilter = "smithing";
         private bool running = true;
         private double fractionalTicks;
         private double previousTime;
@@ -24,7 +28,9 @@ namespace Idlebound.Foundation.Development
         {
             var tiers = Resources.Load<TextAsset>("Idlebound/ResourceTiers");
             var xp = Resources.Load<TextAsset>("Idlebound/KnownXpMilestones");
-            if (tiers == null || xp == null)
+            var recipes = Resources.Load<TextAsset>("Idlebound/ProductionRecipes");
+            var samples = Resources.Load<TextAsset>("Idlebound/DevelopmentProductionRecipes");
+            if (tiers == null || xp == null || recipes == null || samples == null)
             {
                 Debug.LogError("Idlebound gathering data missing; development harness disabled.");
                 enabled = false;
@@ -32,12 +38,17 @@ namespace Idlebound.Foundation.Development
             }
             tierData = tiers.text;
             xpData = xp.text;
+            productionData = recipes.text;
+            developmentProductionData = samples.text;
             ResetSession(false);
         }
 
         private void ResetSession(bool fixture)
         {
-            session = new GatheringSession(GatheringCatalog.Load(tierData, fixture), XpCurve.Load(xpData, true));
+            var catalog = GatheringCatalog.Load(tierData, fixture);
+            var production = ProductionCatalog.Load(productionData + "\n" +
+                (developmentRecipes ? developmentProductionData : ""), catalog.Resources, developmentRecipes);
+            session = new GatheringSession(catalog, XpCurve.Load(xpData, true), production);
             inspected = "character-1";
             fractionalTicks = 0;
             previousTime = Time.realtimeSinceStartupAsDouble;
@@ -97,15 +108,25 @@ namespace Idlebound.Foundation.Development
             {
                 GUILayout.BeginArea(new Rect(16, 12, 688, safe.height / scale - 24));
                 scroll = GUILayout.BeginScrollView(scroll);
-                GUILayout.Label("IDLEBOUND — Stage 8B-02", title);
+                GUILayout.Label("IDLEBOUND — Stage 8B-03", title);
                 GUILayout.Label("In-memory development state • no save/cloud", label);
                 GUILayout.Label(session.UsesDevelopmentXp
                     ? "DEVELOPMENT XP FIXTURE: 100000/cycle. Level is a known milestone floor only."
-                    : "Production XP unavailable. Resource cycles work; XP remains zero.", label);
+                    : "Gathering XP unavailable. Gathering cycles work; no gathering XP.", label);
                 if (GUILayout.Button("Reset / " + (session.UsesDevelopmentXp ? "disable" : "enable") +
                     " DEVELOPMENT XP fixture", button, GUILayout.MinHeight(64)))
                 {
                     ResetSession(!session.UsesDevelopmentXp);
+                    GUIUtility.ExitGUI();
+                }
+                GUILayout.Label(developmentRecipes
+                    ? "DEVELOPMENT RECIPES ON: all sample quantities/levels/XP are test values, not approved balance."
+                    : "Approved recipes unavailable: ingredient amounts and requirements are unresolved.", label);
+                if (GUILayout.Button("Reset / " + (developmentRecipes ? "disable" : "enable") +
+                    " DEVELOPMENT recipe samples", button, GUILayout.MinHeight(64)))
+                {
+                    developmentRecipes = !developmentRecipes;
+                    ResetSession(session.UsesDevelopmentXp);
                     GUIUtility.ExitGUI();
                 }
                 if (GUILayout.Button(running ? "Pause automatic time" : "Resume automatic time", button, GUILayout.MinHeight(60)))
@@ -123,10 +144,12 @@ namespace Idlebound.Foundation.Development
                 foreach (var character in session.Characters)
                 {
                     bool assigned = session.Assignments.TryGetValue(character.Id, out var id);
-                    var activity = assigned ? session.Catalog.Activities.First(a => a.Id == id) : null;
+                    var activity = assigned ? session.Activities.First(a => a.Id == id) : null;
                     string status = activity == null ? "Unassigned" : activity.DisplayName + " • " +
                         (session.PartialTicks(character.Id) / (double)TimeSpan.TicksPerSecond).ToString("0.0") +
                         "/" + (activity.DurationTicks / (double)TimeSpan.TicksPerSecond).ToString("0.0") + "s";
+                    if (activity != null && session.Production.Recipes.Any(r => r.Id == activity.Id) &&
+                        !session.ProductionJobs.ContainsKey(character.Id)) status = activity.DisplayName + " • Ready for next Start";
                     if (GUILayout.Button(character.DisplayName + (session.IsActive(character.Id) ? " [ACTIVE]" : " [background]") +
                         "\n" + status, button, GUILayout.MinHeight(86))) inspected = character.Id;
                 }
@@ -168,17 +191,51 @@ namespace Idlebound.Foundation.Development
                     }
                     GUI.enabled = previousEnabled;
                 }
-                if (GUILayout.Button("Unassign inspected character", button, GUILayout.MinHeight(64)))
+                if (GUILayout.Button("Unassign / cancel inspected job (no input refund)", button, GUILayout.MinHeight(64)))
                 {
                     session.UnassignAt(session.LastSettledTicks, inspected);
                     GUIUtility.ExitGUI();
                 }
-                GUILayout.Label("SHARED RESOURCE INVENTORY", title);
-                foreach (var resource in session.Catalog.Resources)
-                    if (session.Quantity(resource.Id) > 0)
-                        GUILayout.Label(resource.DisplayName + " × " + session.Quantity(resource.Id), label);
+                GUILayout.Label("PRODUCTION — ONE JOB PER START", title);
+                GUILayout.Label("Ingredients consumed at start. Cancel/change/swap discards progress and consumed inputs (development policy pending approval). No automatic queue.", label);
+                GUILayout.BeginHorizontal();
+                foreach (string id in new[] { "smithing", "crafting", "cooking" })
+                    if (GUILayout.Button(session.Skills.First(s => s.Id == id).DisplayName, button, GUILayout.MinHeight(64)))
+                    {
+                        productionFilter = id;
+                        GUIUtility.ExitGUI();
+                    }
+                GUILayout.EndHorizontal();
+                if (session.Production.Recipes.Count == 0)
+                    GUILayout.Label("No fully approved recipes. Enable DEVELOPMENT recipe samples above to test the full loop (resets state).", label);
+                foreach (var recipe in session.Production.Recipes.Where(r => r.SkillId == productionFilter))
+                {
+                    bool eligible = session.MeetsRequirement(inspected, session.Activities.First(a => a.Id == recipe.Id));
+                    bool occupied = session.Assignments.Any(a => a.Key != inspected && a.Value == recipe.Id);
+                    bool working = session.ProductionJobs.TryGetValue(inspected, out var job) && job.Id == recipe.Id;
+                    GUILayout.Label(recipe.DisplayName + " • " + recipe.Category + " • Lv " + recipe.RequiredLevel +
+                        " • " + (recipe.DurationTicks / (double)TimeSpan.TicksPerSecond).ToString("0.#") + "s\nOutput: " +
+                        recipe.OutputName + " × " + recipe.OutputQuantity + " • XP " + (recipe.XpReward?.ToString() ?? "TBD"), label);
+                    foreach (var input in recipe.Inputs)
+                        GUILayout.Label("Needs " + session.Production.ItemNames[input.Key] + " × " + input.Value +
+                            " • Bank: " + session.Quantity(input.Key), label);
+                    GUI.enabled = previousEnabled && eligible && session.CanAfford(recipe) && !working;
+                    string action = working ? "Job running" : !eligible ? "Level locked" : !session.CanAfford(recipe)
+                        ? "Insufficient ingredients" : occupied ? "Swap Assignment and Start" : "Start one job";
+                    if (GUILayout.Button(action + " — " + recipe.DisplayName, button, GUILayout.MinHeight(64)))
+                    {
+                        session.StartProductionAt(session.LastSettledTicks, inspected, recipe.Id, occupied, out var error);
+                        message = error ?? "Started " + recipe.DisplayName + "; ingredients deducted. No output/XP until completion.";
+                        GUIUtility.ExitGUI();
+                    }
+                    GUI.enabled = previousEnabled;
+                }
+                GUILayout.Label("SHARED BANK — MATERIALS AND FINISHED PRODUCTS", title);
+                foreach (var item in session.Production.ItemNames)
+                    if (session.Quantity(item.Key) > 0)
+                        GUILayout.Label(item.Value + " × " + session.Quantity(item.Key), label);
                 if (session.Inventory.Count == 0) GUILayout.Label("Empty — complete a gathering cycle.", label);
-                GUILayout.Label("No background bonuses equipped. Offline uses background XP for everyone. No gem rolls/recipes implemented.", label);
+                GUILayout.Label("No background bonuses equipped. Offline uses background XP for everyone. No gem rolls, equipment stats or equipping.", label);
                 GUILayout.EndScrollView();
                 GUILayout.EndArea();
             }

@@ -7,7 +7,7 @@ namespace Idlebound.Foundation
 {
     // Single owner of assignment/selection/effect mutation and time settlement.
     // In-memory only: no persistence, wall-clock authority, or production offline replay.
-    public sealed class GatheringSession
+    public sealed partial class GatheringSession
     {
         public const long BaseOfflineTicks = 4L * TimeSpan.TicksPerHour;
         private readonly GameState state;
@@ -26,11 +26,20 @@ namespace Idlebound.Foundation
         public bool UsesDevelopmentXp => Catalog.UsesDevelopmentXp;
         public bool UsesSparseCurve => curve.IsDevelopmentFixture;
 
-        public GatheringSession(GatheringCatalog catalog, XpCurve curve)
+        public GatheringSession(GatheringCatalog catalog, XpCurve curve, ProductionCatalog production = null)
         {
             Catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             this.curve = curve ?? throw new ArgumentNullException(nameof(curve));
-            state = new GameState(new RosterAccess(), SkillCatalog.Create(), catalog.Activities);
+            Production = production ?? new ProductionCatalog(Array.Empty<ProductionRecipe>(), catalog.Resources);
+            var knownItems = new HashSet<string>(catalog.Resources.Select(r => r.Id)
+                .Concat(Production.Recipes.Select(r => r.OutputId)));
+            if (Production.ItemNames.Keys.Any(id => !knownItems.Contains(id)) ||
+                catalog.Resources.Any(r => !Production.ItemNames.TryGetValue(r.Id, out var name) || name != r.DisplayName) ||
+                Production.Recipes.Any(r => catalog.Resources.Any(raw => raw.Id == r.OutputId)))
+                throw new ArgumentException("Production catalog does not match session resource definitions.");
+            ProductionJobs = new ReadOnlyDictionary<string, ProductionRecipe>(productionJobs);
+            state = new GameState(new RosterAccess(), SkillCatalog.Create(),
+                catalog.Activities.Concat(Production.Recipes.Select(r => r.Activity())));
             for (int i = 1; i <= RosterAccess.InitialAvailableSlots; i++)
                 state.TryAddCharacter(new CharacterState("character-" + i, "Character " + i,
                     state.Skills.Select(s => new SkillState(s.Id, 1, 0))));
@@ -58,6 +67,7 @@ namespace Idlebound.Foundation
             public long Remaining;
             public long TotalCycles;
             public decimal Xp;
+            public bool FinishedProduction;
         }
 
         public void SettleTo(long absoluteTicks, bool offline = false)
@@ -71,10 +81,14 @@ namespace Idlebound.Foundation
             // Preflight all rewards before mutating anything; checked overflow cannot partly pay a batch.
             foreach (var assignment in Assignments.OrderBy(a => a.Key, StringComparer.Ordinal))
             {
-                var activity = Catalog.Activities.First(a => a.Id == assignment.Value);
+                var activity = Activities.First(a => a.Id == assignment.Value);
+                var recipe = Production.Recipes.FirstOrDefault(r => r.Id == assignment.Value);
+                if (recipe != null && !productionJobs.ContainsKey(assignment.Key)) continue;
                 decimal ticks = PartialTicks(assignment.Key) + (decimal)eligible;
-                long cycles = checked((long)decimal.Floor(ticks / activity.DurationTicks));
-                long remainder = (long)(ticks % activity.DurationTicks);
+                long cycles = recipe == null ? checked((long)decimal.Floor(ticks / activity.DurationTicks))
+                    : ticks >= activity.DurationTicks ? 1 : 0;
+                long remainder = recipe == null ? (long)(ticks % activity.DurationTicks)
+                    : cycles == 1 ? 0 : (long)ticks;
                 var skill = Characters.First(c => c.Id == assignment.Key).Skills.First(s => s.SkillId == activity.SkillId);
                 decimal rate = XpPolicy.Efficiency(IsActive(assignment.Key), offline, activity.SkillId, EffectsFor(assignment.Key));
                 decimal xp = checked(cycles * (activity.XpPerCycle ?? 0m) * rate);
@@ -84,10 +98,10 @@ namespace Idlebound.Foundation
                 if (cycles > 0)
                 {
                     long before = nextInventory.TryGetValue(activity.ResourceId, out var count) ? count : 0;
-                    nextInventory[activity.ResourceId] = checked(before + cycles);
+                    nextInventory[activity.ResourceId] = checked(before + checked(cycles * (recipe?.OutputQuantity ?? 1)));
                 }
                 plans.Add(new Settlement { CharacterId = assignment.Key, Skill = skill,
-                    Remaining = remainder, TotalCycles = totalCycles, Xp = xp });
+                    Remaining = remainder, TotalCycles = totalCycles, Xp = xp, FinishedProduction = recipe != null && cycles == 1 });
             }
             inventory.Clear();
             foreach (var pair in nextInventory) inventory.Add(pair.Key, pair.Value);
@@ -96,6 +110,7 @@ namespace Idlebound.Foundation
                 partialTicks[plan.CharacterId] = plan.Remaining;
                 completedCycles[plan.CharacterId] = plan.TotalCycles;
                 plan.Skill.Award(plan.Xp, curve);
+                if (plan.FinishedProduction) productionJobs.Remove(plan.CharacterId);
             }
             // Advance across ineligible offline excess too, so a repeated call cannot reclaim it.
             LastSettledTicks = absoluteTicks;
@@ -110,12 +125,13 @@ namespace Idlebound.Foundation
         public bool AssignAt(long ticks, string characterId, string activityId, bool swap, out string error)
         {
             SettleTo(ticks);
+            if (Production.Recipes.Any(r => r.Id == activityId))
+            { error = "Use StartProductionAt so ingredients are consumed."; return false; }
             var before = Assignments.ToDictionary(p => p.Key, p => p.Value);
             bool success = swap ? state.TrySwapAssignment(characterId, activityId, out error)
                 : state.TryAssign(characterId, activityId, out error);
             if (!success) return false;
-            foreach (var pair in before)
-                if (!Assignments.TryGetValue(pair.Key, out var now) || now != pair.Value) partialTicks.Remove(pair.Key);
+            DiscardChangedJobs(before);
             // Selecting the same exact assignment is idempotent and keeps its partial cycle.
             if (!before.TryGetValue(characterId, out var old) || old != activityId) partialTicks.Remove(characterId);
             return true;
@@ -125,7 +141,11 @@ namespace Idlebound.Foundation
         {
             SettleTo(ticks);
             bool removed = state.Unassign(characterId);
-            if (removed) partialTicks.Remove(characterId);
+            if (removed)
+            {
+                partialTicks.Remove(characterId);
+                productionJobs.Remove(characterId);
+            }
             return removed;
         }
 

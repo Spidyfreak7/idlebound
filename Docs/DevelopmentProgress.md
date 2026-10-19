@@ -1,11 +1,11 @@
 # Development progress
 
-Statuses describe verified work only. Stage 8B-01 and 8B-02 scopes and verification steps are recorded in their verification documents. Later stage scopes remain pending.
+Statuses describe verified work only. Stage 8B-01 through 8B-03 scopes and verification steps are recorded in their verification documents. Later stage scopes remain pending.
 
 | Stage | Initial status | Evidence / next step |
 | --- | --- | --- |
 | 8A | In progress | 8A-04 repository/static verification and foundation documentation completed; local Unity compilation, scene, and mobile validation pending. Other 8A work is not assessed here. |
-| 8B | In progress | 8B-01: user-reported seven manual checks and 14 EditMode cases passed on Windows. 8B-02: gathering, resource inventory, XP policy/loader, source reconciliation and tests implemented; Windows verification pending. |
+| 8B | In progress | 8B-01: user-reported seven manual checks and 14 EditMode cases passed on Windows. 8B-02: user reports all 49 EditMode cases passed and gathering works in Play mode. 8B-03: production implemented with isolated development samples; 53 new cases authored, Windows validation pending. |
 | 8C | Not started | Await approved scope. |
 | 8D | Not started | Await approved scope. |
 | 8E | Not started | Await approved scope. |
@@ -29,4 +29,8 @@ Open the project locally using the README instructions, inspect the Console, run
 
 ## Stage 8B-02
 
-See `IdleboundMasterDesign.md` for the four-source reconciliation and preserved numerical tables, and `Stage8B02Verification.md` for exact manual checks and pending specifications. Production XP/action and most level thresholds remain unavailable. An opt-in development fixture is clearly separated from production data. No Unity runtime or NUnit pass is claimed for 8B-02. No packages, networking, recipes, combat, or monetization were added.
+See `IdleboundMasterDesign.md` for the four-source reconciliation and preserved numerical tables, and `Stage8B02Verification.md` for exact manual checks and pending specifications. Production XP/action and most level thresholds remain unavailable. An opt-in development fixture is clearly separated from production data. The user subsequently verified gathering in Play mode and all 49 EditMode cases passed on Windows; the cloud did not execute those checks. No packages, networking, recipes, combat, or monetization were added in 8B-02.
+
+## Stage 8B-03
+
+See `Stage8B03Verification.md` for implementation, test steps and policy decisions. Added validated recipes, atomic ingredient consumption, one-job timed production, finished products in the shared bank and production UI. Approved recipe data remains empty because full ingredient quantities/requirements/XP are missing. Five explicitly opted-in development recipes support the full loop. Cancellation/no-refund, completion-time XP and single-job/queue behavior are disclosed engineering policies, not new design approvals. Existing 49 tests remain unchanged; 53 new cases are authored but not cloud-executed. No equipping, equipment stats, package, scene or project-setting changes.
