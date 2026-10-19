@@ -38,7 +38,7 @@ namespace Idlebound.Foundation
         internal void Award(decimal xp, XpCurve curve)
         {
             if (xp < 0) throw new ArgumentOutOfRangeException(nameof(xp));
-            StoredXp = checked(StoredXp + xp);
+            StoredXp = curve.ApplyAward(StoredXp, xp);
             Level = Math.Max(Level, curve.KnownLevelFloor(StoredXp));
         }
     }

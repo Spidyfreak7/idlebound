@@ -26,10 +26,11 @@ namespace Idlebound.Foundation
         public decimal? XpReward { get; }
         public bool IsDevelopmentOnly { get; }
         public string Provenance { get; }
+        public bool IsBalanceAssumption { get; }
 
         public ProductionRecipe(string id, string name, string skillId, ProductionCategory category,
             string outputId, string outputName, long outputQuantity, IEnumerable<KeyValuePair<string, long>> inputs,
-            int requiredLevel, long durationTicks, decimal? xpReward, bool developmentOnly, string provenance)
+            int requiredLevel, long durationTicks, decimal? xpReward, bool developmentOnly, string provenance, bool balanceAssumption = false)
         {
             if (!ValidId(id) || !ValidId(outputId) || string.IsNullOrWhiteSpace(name) ||
                 string.IsNullOrWhiteSpace(outputName) || string.IsNullOrWhiteSpace(provenance))
@@ -40,6 +41,7 @@ namespace Idlebound.Foundation
                 category == ProductionCategory.MagicWeapon || category == ProductionCategory.LeatherArmor ||
                 category == ProductionCategory.ClothArmor || category == ProductionCategory.Offhand) ||
                 skillId == "cooking" && category == ProductionCategory.Food;
+            if (developmentOnly && balanceAssumption) throw new ArgumentException("Fixtures cannot be live balance assumptions.");
             if (!allowed) throw new ArgumentException("Category is not supported by this production skill.");
             if (outputQuantity <= 0 || requiredLevel < 1 || requiredLevel > 99 || durationTicks <= 0 || xpReward < 0)
                 throw new ArgumentOutOfRangeException(nameof(outputQuantity), "Invalid recipe quantity, level, duration or XP.");
@@ -63,7 +65,7 @@ namespace Idlebound.Foundation
             OutputId = outputId; OutputName = outputName; OutputQuantity = outputQuantity;
             Inputs = new ReadOnlyDictionary<string, long>(copy);
             RequiredLevel = requiredLevel; DurationTicks = durationTicks; XpReward = xpReward;
-            IsDevelopmentOnly = developmentOnly; Provenance = provenance;
+            IsDevelopmentOnly = developmentOnly; Provenance = provenance; IsBalanceAssumption = balanceAssumption;
         }
 
         private static bool ValidId(string id) => !string.IsNullOrWhiteSpace(id) &&
@@ -116,7 +118,7 @@ namespace Idlebound.Foundation
             {
                 var row = line.Split(',').Select(x => x.Trim()).ToArray();
                 if (row.Length != 13) throw new ArgumentException("Recipe CSV requires 13 fields.");
-                if (row[11] != "approved" && row[11] != "development") throw new ArgumentException("Unknown recipe authority status.");
+                if (row[11] != "approved" && row[11] != "development" && row[11] != "new-assumption") throw new ArgumentException("Unknown recipe authority status.");
                 if (!Enum.TryParse(row[3], out ProductionCategory category) ||
                     !Enum.IsDefined(typeof(ProductionCategory), category) || category.ToString() != row[3])
                     throw new ArgumentException("Unknown production category.");
@@ -134,7 +136,7 @@ namespace Idlebound.Foundation
                     long.Parse(row[6], CultureInfo.InvariantCulture), inputs,
                     int.Parse(row[8], CultureInfo.InvariantCulture), (long)ticks,
                     row[10] == "TBD" ? (decimal?)null : decimal.Parse(row[10], CultureInfo.InvariantCulture),
-                    row[11] == "development", row[12]));
+                    row[11] == "development", row[12], row[11] == "new-assumption"));
             }
             return new ProductionCatalog(recipes, resources, allowDevelopment);
         }

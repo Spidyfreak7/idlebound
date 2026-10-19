@@ -43,11 +43,27 @@ namespace Idlebound.Foundation
                 if (!values.TryGetValue(pair.Key, out var xp) || xp != pair.Value)
                     throw new ArgumentException("Missing or incorrect XP milestone: " + pair.Key);
             if (!developmentFixture && (values.Count != 99 || Enumerable.Range(1, 99).Any(i => !values.ContainsKey(i))))
-                throw new ArgumentException("Production curve requires all 99 levels; interpolation is forbidden.");
+                throw new ArgumentException("Production curve requires all 99 explicit level rows.");
             return new XpCurve(values, developmentFixture);
         }
 
-        // Sparse fixture yields a known lower bound only; it never invents intermediate levels.
+        public decimal ApplyAward(decimal current, decimal award)
+        {
+            if (current < 0 || award < 0) throw new ArgumentOutOfRangeException(nameof(award));
+            if (IsDevelopmentFixture) return checked(current + award); // Legacy fixture semantics.
+            decimal cap = thresholds[99];
+            return current >= cap ? cap : current + Math.Min(award, cap - current);
+        }
+
+        public decimal? NextLevelXp(decimal xp)
+        {
+            if (xp < 0) throw new ArgumentOutOfRangeException(nameof(xp));
+            foreach (var threshold in thresholds.Values)
+                if (threshold > xp) return threshold;
+            return null;
+        }
+
+        // Full curve gives exact levels; sparse legacy fixtures give a lower bound only.
         public int KnownLevelFloor(decimal xp)
         {
             if (xp < 0) throw new ArgumentOutOfRangeException(nameof(xp));

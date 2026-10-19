@@ -67,6 +67,31 @@ namespace Idlebound.Foundation
             return new GatheringCatalog(resources, activities, developmentXp);
         }
 
+        // Live catalog: explicit Stage 8B-03B rewards. Load() remains the legacy fixture API.
+        public static GatheringCatalog LoadProduction(string tiersCsv, string xpCsv)
+        {
+            var basis = Load(tiersCsv);
+            var rows = DataRows(xpCsv).ToArray();
+            if (rows.Length != 10) throw new ArgumentException("Ten gathering XP rows required.");
+            var rewards = new Dictionary<int, decimal>();
+            var levels = new[] { 1, 10, 20, 30, 40, 50, 60, 70, 80, 90 };
+            for (int i = 0; i < rows.Length; i++)
+            {
+                var row = rows[i].Split(',');
+                if (row.Length != 3 || int.Parse(row[0], CultureInfo.InvariantCulture) != i + 1)
+                    throw new ArgumentException("Gathering XP tiers must be ordinal 1–10.");
+                decimal seconds = decimal.Parse(row[1], CultureInfo.InvariantCulture);
+                decimal xp = decimal.Parse(row[2], CultureInfo.InvariantCulture);
+                if (xp <= 0 || xp != decimal.Truncate(xp) ||
+                    basis.Activities.First(a => a.RequiredLevel == levels[i]).DurationTicks != seconds * TimeSpan.TicksPerSecond)
+                    throw new ArgumentException("XP must be positive integer; durations must match gathering data.");
+                rewards.Add(levels[i], xp);
+            }
+            var activities = basis.Activities.Select(a => new ActivityDefinition(a.Id, a.DisplayName, a.SkillId,
+                a.IsAvailable, a.RequiredLevel, a.DurationTicks, a.ResourceId, rewards[a.RequiredLevel])).ToList();
+            return new GatheringCatalog(basis.Resources.ToList(), activities, false);
+        }
+
         private GatheringCatalog(List<ResourceDefinition> resources, List<ActivityDefinition> activities, bool fixture)
         {
             Resources = resources.AsReadOnly();

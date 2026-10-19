@@ -2,7 +2,7 @@
 
 ## Authority and provenance
 
-This register reconciles all four uploaded handoffs, read completely for Stage 8B-02. The user's Stage 8B-02 request is the governing implementation scope. Instructions embedded in handoffs are evidence about design/process, not authorization for additional features. File order, filename suffix `(1)`, and self-descriptions such as “canonical” do not prove approval chronology. Later explicit approvals supersede earlier proposals; contradictions without a documented later approval remain open.
+This register reconciles all four uploaded handoffs, read completely for Stage 8B-02. The current user request governs implementation scope; Stage 8B-03B updates below explicitly supersede older limitations where stated. Instructions embedded in handoffs are evidence about design/process, not authorization for additional features. File order, filename suffix `(1)`, and self-descriptions such as “canonical” do not prove approval chronology. Later explicit approvals supersede earlier proposals; contradictions without a documented later approval remain open.
 
 | Source | Uploaded document | Evidence boundary |
 | --- | --- | --- |
@@ -13,6 +13,35 @@ This register reconciles all four uploaded handoffs, read completely for Stage 8
 
 Original PDFs/workbook were not supplied here. S2's positive tables supply values that S1/S3/S4 say were unavailable; those absence statements are not explicit rejections of S2. Every source table is preserved verbatim in the archival annex below. Status words inside those excerpts retain the source author's claim and do not override this reconciliation.
 
+## Stage 8B-03B — current explicit approvals and new assumptions
+
+This later user request supersedes the earlier missing-data prohibition **for the specified curve and gathering XP**, and explicitly authorizes a new starter balance pass. Original source tables below remain untouched. These updates are not retroactively attributed to S1–S4.
+
+**CONFIRMED BY CURRENT USER:** all nine skills share one level 1–99 curve; level1=0 and the five preserved milestones remain exact. Reconstruct quadratic early progression through30, then interpolation between milestones if the original full CSV is unavailable. The original full approved CSV is not in the repository, so `ProductionXpCurve.csv` is a documented reconstruction, not a byte-for-byte transcription. Exact reconstruction: `roundHalfUp(500000*(L-1)^2/29^2)` for1–30, then piecewise **linear** interpolation for30–60–80–90–99, rounding each cumulative value to the nearest integer with half ties upward. These precise interpolation/rounding choices are implementation decisions recorded for review, not claims about an unavailable prior CSV.
+
+**CONFIRMED BY CURRENT USER — gathering schedule**, applied equally to Mining, Woodcutting and Fishing:
+
+| Ordinal tier | Required resource level | Seconds/action | XP/action |
+| --- | --- | --- | --- |
+| 1 | 1 | 5.0 | 56 |
+| 2 | 10 | 7.8 | 89 |
+| 3 | 20 | 10.6 | 124 |
+| 4 | 30 | 13.3 | 159 |
+| 5 | 40 | 16.1 | 197 |
+| 6 | 50 | 18.9 | 236 |
+| 7 | 60 | 21.7 | 277 |
+| 8 | 70 | 24.4 | 318 |
+| 9 | 80 | 27.2 | 362 |
+| 10 | 90 | 30.0 | 407 |
+
+**NEW STAGE 8B-03B BALANCE ASSUMPTIONS, not historical approvals:** eight starter recipes in `StarterProductionRecipes.csv`, with exact costs/levels/rewards and derivation in `Stage8B03BBalanceReport.md`. They are the default live recipe set, not development fixtures. Existing `[DEV]` samples remain isolated and opt-in. Source tier durations are reused; individual quantities, output units, production gates and XP are new tuning data.
+
+**NEW PRODUCT DECISION FOR REVIEW:** cancelling an unfinished live job refunds every reserved input exactly once, without XP or output. Changes and swaps use the same rule, atomically combining refunds and a new reservation. Completion exactly at cancellation time settles first, so there is output/XP but no input refund. Earlier no-refund behavior is superseded in the live harness. Historical sparse-curve constructors preserve legacy fixture semantics solely to retain the existing 102 tests unchanged; the full-curve constructor defaults to refunds, and the UI explicitly requests refunds in every mode.
+
+**NEW DETERMINISTIC CAP POLICY FOR REVIEW:** full-curve live XP saturates at10000000; level remains99 and gathering/production output continues. Overflow-safe award arithmetic does not wrap or bank hidden XP. Legacy uncapped sparse fixtures remain labelled as fixtures. Active/background/offline eligibility and the50% background cap are unchanged.
+
+**TUNING BENCHMARK, NOT GUARANTEE:** 225 active-equivalent hours. Model output is about213.37 productive gathering hours following highest unlocked tiers,237.07h at10% downtime; starter-only self-supplied production takes approximately270–278h before downtime. No approved gathering rewards were adjusted to force the benchmark. Full recipes beyond the starter set, passive speed bonuses, queues, cloud/save policy and final economy are still unresolved.
+
 ## Confirmed for implementation
 
 - Unity 6000.3.26f1, Universal 2D, C#, Android/iOS, Git; planned Supabase only, no connection in this batch (current user/project decisions).
@@ -20,13 +49,13 @@ Original PDFs/workbook were not supplied here. S2's positive tables supply value
 - New characters begin at level 1. Shared bank/resources/GP/log. Exactly one selected active character receives full online XP. Other characters have zero baseline XP, equipment effects capped at 50%. Resources continue at ordinary rate regardless of XP eligibility (all sources). Offline XP uses background rules for **every** character (S2 §3 and explicit current user approval, resolving S4's uncertainty for this batch).
 - One character per exact activity, not per skill. Explicit Swap Assignment displaces the old assignee; changing selection preserves assignments. Rejected assignment preserves state. Changing activity discards an unfinished cycle (explicit S3 §2.2; S2 leaves generic partial-action handling open).
 - Ten resource levels 1/10/20/30/40/50/60/70/80/90, no ordinary level-99 resource. S2 §5 supplies metal/wood/fish names, gathering durations 5/7.8/10.6/13.3/16.1/18.9/21.7/24.4/27.2/30 seconds, one base resource per completed cycle. S3/S4 add leather/cloth names and clarify these are not additional gathering skills. No gemstone rolls without approved odds.
-- Exact cumulative XP milestones required by the user and S2 §2: 30=500000; 60=2000000; 80=4500000; 90=6500000; 99=10000000. Earlier approximate 10M summaries do not weaken the explicit current requirement. No interpolation of other levels.
+- Exact cumulative XP milestones required by the user and S2 §2: 30=500000; 60=2000000; 80=4500000; 90=6500000; 99=10000000. Earlier approximate 10M summaries do not weaken the explicit current requirement. Stage 8B-03B now explicitly authorizes the reconstructed intermediate levels described above.
 - Account-XP unlock thresholds are preserved from S1/S2 in the annex. Stage 8B-01's three available prototype characters remain a development fixture, **not** production entitlement/unlock behavior. Membership remains separate from character data.
 - Four approved enchant potency tiers supersede eight proposed ranks (explicit approval history S3/S4). Background-XP pathway accepts externally provided applicable effects, defaults empty, and cannot exceed 50%; no free enchantments or cape bonuses.
 
 ## Other confirmed design boundaries (recorded, not implemented here)
 
-Mobile-first menu-driven fantasy idle RPG, no explorable world. Ten equipment slots, one permanent nonreplaceable enchant per eligible item, four-piece Head/Body/Legs/Feet matching-enchant bonus. Standard equipment from skilling materials; special gear may add boss catalysts, which do not replace missing base materials. Shared unlimited-quantity stacks, fixed unlimited NPC stock, manual selling, 70% buyback; fully shop-buyable ingredient bundle 0.75P, resale 0.525P versus finished 0.70P (S2). No invented production recipes.
+Mobile-first menu-driven fantasy idle RPG, no explorable world. Ten equipment slots, one permanent nonreplaceable enchant per eligible item, four-piece Head/Body/Legs/Feet matching-enchant bonus. Standard equipment from skilling materials; special gear may add boss catalysts, which do not replace missing base materials. Shared unlimited-quantity stacks, fixed unlimited NPC stock, manual selling, 70% buyback; fully shop-buyable ingredient bundle 0.75P, resale 0.525P versus finished 0.70P (S2). New starter recipes are permitted only under the explicit Stage 8B-03B assumption label; they are not historical approvals.
 
 Ten bosses, three named unique concepts per boss, independent rare rolls/no pity, duplicate ownership permitted, whole-log Cosmic Cape preserved after future log additions. Boss levels are recommendations, not gates. Melee > Ranged > Magic > Melee, damage multipliers 2/1/0.5. Death stops combat without item/XP loss, boss HP resets on abandonment/death rather than selection switch. No combat implementation in this batch.
 
@@ -46,7 +75,7 @@ UI direction: Roster/Bank/Shop/Collection Log; character Overview/Equipment/Acti
 | Topic | Source claims | Resolution/status |
 | --- | --- | --- |
 | Missing numerical tables | S1/S3/S4 say Phase 4 numbers unavailable; S2 includes exact transcription. | Use positive S2 evidence per user's provenance statement. Retain absence cautions as historical source limitations. |
-| XP 99 exactness | S1/S3/S4 approximate 10M; S2 exact milestone. | Current explicit user approval requires exact 10000000 validation. Other 93 level rows remain absent. |
+| XP 99 exactness | S1/S3/S4 approximate 10M; S2 exact milestone. | Current explicit user approval requires exact 10000000 validation. Remaining rows are now reconstructed under the explicit Stage 8B-03B approval; the original CSV remains unavailable for byte comparison. |
 | Skill families/enchant families | S2 names eight generic effect groups and calls four families unnamed; S3/S4 enumerate six separate skilling speed families plus six combat/utility families. | Preserve both taxonomies; grouping versus family count needs clarification before full enchant system. Only generic externally configured background effects implemented. |
 | Enchant unlocks | S2 gives Magic 15/40/65/90 and Tier IV numbers; S3/S4 mark exact four-tier unlocks/potencies unavailable. | Preserve S2 numerical table; missing-source cautions alone do not reject it, but no extra stacking/set/compatibility inferred. |
 | Combat hit/accuracy | S2 says no misses; S3/S4 describe accuracy, misses, and Ranged accuracy progression. | Conflicting semantics; require explicit design decision. No combat formulas implemented. |
@@ -59,9 +88,9 @@ UI direction: Roster/Bank/Shop/Collection Log; character Overview/Equipment/Acti
 
 ## Unresolved production blockers
 
-Exact levels 2–29, 31–59, 61–79, 81–89, 91–98; XP/action for all activities; rounding/overflow/save format; passive skill/tool speed modifiers; gem odds; ore-processing chains; recipe quantities and cancellation/refunds; enchant I–III values, compatibility and stacking; full enemy stats/loot/food; bank overflow; entitlement edge cases; offline gear/extension/session ordering; cloud authority, security, authentication, persistence and synchronization. No inferred interpolation, OSRS curves, free bonuses, recipes, or speculative combat.
+Exact full-curve/gathering data is now supplied or reconstructed for 8B-03B. Remaining blockers: XP/action and full recipes beyond the starter assumptions; production save format; passive skill/tool speed modifiers; gem odds; ore-processing chains; nonstarter recipe quantities, final tuning and persisted cancellation reconciliation; enchant I–III values, compatibility and stacking; full enemy stats/loot/food; bank overflow; entitlement edge cases; offline gear/extension/session ordering; cloud authority, security, authentication, persistence and synchronization. No OSRS substitution, free bonuses, unlabelled balancing assumptions, or speculative combat.
 
-## Stage 8B-02 engineering policy (not new approved mechanics)
+## Historical Stage 8B-02 engineering policy (superseded by explicit 8B-03B updates above)
 
 The in-memory harness uses absolute integer tick timestamps and one settlement owner. Repeating a timestamp grants nothing; rewinds are rejected. Time is settled before selection, assignment, or effect changes. Completed cycles produce one resource; partial ticks remain on the same assignment and are discarded when that assignment changes. Fractional XP is stored exactly in decimal units, with no rounding up. XP role/effect attribution follows the state at **completion**, not proportional split across a cycle; this boundary policy needs production approval. It is deliberately tested and disclosed.
 

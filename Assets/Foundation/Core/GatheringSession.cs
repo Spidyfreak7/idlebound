@@ -25,11 +25,16 @@ namespace Idlebound.Foundation
         public long LastSettledTicks { get; private set; }
         public bool UsesDevelopmentXp => Catalog.UsesDevelopmentXp;
         public bool UsesSparseCurve => curve.IsDevelopmentFixture;
+        public XpCurve Curve => curve;
+        public bool RefundCancelledInputs { get; }
 
-        public GatheringSession(GatheringCatalog catalog, XpCurve curve, ProductionCatalog production = null)
+        public GatheringSession(GatheringCatalog catalog, XpCurve curve, ProductionCatalog production = null, bool? refundCancelledInputs = null)
         {
             Catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             this.curve = curve ?? throw new ArgumentNullException(nameof(curve));
+            // Full-curve production defaults to refunds. Sparse historical fixtures preserve their
+            // old test contract unless explicitly opted into the new reversible policy.
+            RefundCancelledInputs = refundCancelledInputs ?? !curve.IsDevelopmentFixture;
             Production = production ?? new ProductionCatalog(Array.Empty<ProductionRecipe>(), catalog.Resources);
             var knownItems = new HashSet<string>(catalog.Resources.Select(r => r.Id)
                 .Concat(Production.Recipes.Select(r => r.OutputId)));
@@ -92,7 +97,7 @@ namespace Idlebound.Foundation
                 var skill = Characters.First(c => c.Id == assignment.Key).Skills.First(s => s.SkillId == activity.SkillId);
                 decimal rate = XpPolicy.Efficiency(IsActive(assignment.Key), offline, activity.SkillId, EffectsFor(assignment.Key));
                 decimal xp = checked(cycles * (activity.XpPerCycle ?? 0m) * rate);
-                decimal nextXp = checked(skill.StoredXp + xp);
+                decimal nextXp = curve.ApplyAward(skill.StoredXp, xp);
                 curve.KnownLevelFloor(nextXp);
                 long totalCycles = checked(CompletedCycles(assignment.Key) + cycles);
                 if (cycles > 0)
@@ -127,10 +132,13 @@ namespace Idlebound.Foundation
             SettleTo(ticks);
             if (Production.Recipes.Any(r => r.Id == activityId))
             { error = "Use StartProductionAt so ingredients are consumed."; return false; }
+            if (!TryPlanChange(characterId, activityId, swap, out var cancelled, out error)) return false;
+            var refundedInventory = PreviewRefunds(cancelled);
             var before = Assignments.ToDictionary(p => p.Key, p => p.Value);
             bool success = swap ? state.TrySwapAssignment(characterId, activityId, out error)
                 : state.TryAssign(characterId, activityId, out error);
             if (!success) return false;
+            ReplaceInventory(refundedInventory);
             DiscardChangedJobs(before);
             // Selecting the same exact assignment is idempotent and keeps its partial cycle.
             if (!before.TryGetValue(characterId, out var old) || old != activityId) partialTicks.Remove(characterId);
@@ -140,9 +148,11 @@ namespace Idlebound.Foundation
         public bool UnassignAt(long ticks, string characterId)
         {
             SettleTo(ticks);
+            var refundedInventory = PreviewRefunds(new[] { characterId });
             bool removed = state.Unassign(characterId);
             if (removed)
             {
+                ReplaceInventory(refundedInventory);
                 partialTicks.Remove(characterId);
                 productionJobs.Remove(characterId);
             }

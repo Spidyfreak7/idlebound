@@ -1,0 +1,10 @@
+# NEW STAGE 8B-03B BALANCE ASSUMPTIONS. Playable initial data, NOT historical approvals.
+# id,name,skill,category,outputId,outputName,outputQuantity,inputs,requiredLevel,seconds,XP-or-TBD,status,source
+bronze-dagger,Bronze dagger,smithing,MetalWeapon,bronze-dagger-item,Bronze dagger,1,metal-1:2,1,15,250,new-assumption,NEW STAGE 8B-03B BALANCE ASSUMPTIONS
+bronze-helm,Bronze helm,smithing,MetalArmor,bronze-helm-item,Bronze helm,1,metal-1:3,5,15,300,new-assumption,NEW STAGE 8B-03B BALANCE ASSUMPTIONS
+wood-shortbow,Common wood shortbow,crafting,RangedWeapon,wood-shortbow-item,Common wood shortbow,1,wood-1:2,1,15,250,new-assumption,NEW STAGE 8B-03B BALANCE ASSUMPTIONS
+wood-wand,Common wood wand,crafting,MagicWeapon,wood-wand-item,Common wood wand,1,wood-1:2,1,15,250,new-assumption,NEW STAGE 8B-03B BALANCE ASSUMPTIONS
+wood-crossbow,Common wood crossbow,crafting,RangedWeapon,wood-crossbow-item,Common wood crossbow,1,wood-1:1;metal-1:1,5,15,250,new-assumption,NEW STAGE 8B-03B BALANCE ASSUMPTIONS
+cooked-shrimp,Cook shrimp,cooking,Food,cooked-shrimp-item,Cooked shrimp,1,fish-1:1,1,5,100,new-assumption,NEW STAGE 8B-03B BALANCE ASSUMPTIONS
+iron-dagger,Iron dagger,smithing,MetalWeapon,iron-dagger-item,Iron dagger,1,metal-10:2,10,30,470,new-assumption,NEW STAGE 8B-03B BALANCE ASSUMPTIONS
+cooked-sardine,Cook sardine,cooking,Food,cooked-sardine-item,Cooked sardine,1,fish-10:1,10,7,150,new-assumption,NEW STAGE 8B-03B BALANCE ASSUMPTIONS
