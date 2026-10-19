@@ -18,14 +18,14 @@ namespace Idlebound.Foundation
         }
     }
 
-    // XP is stored only. No curve, level calculation, or XP generation is defined.
+    // Decimal XP retains fractional background awards; level calculation is supplied by a curve.
     public sealed class SkillState
     {
         public const int MaximumLevel = 99;
         public string SkillId { get; }
-        public int Level { get; }
-        public long StoredXp { get; }
-        public SkillState(string skillId, int level, long storedXp)
+        public int Level { get; private set; }
+        public decimal StoredXp { get; private set; }
+        public SkillState(string skillId, int level, decimal storedXp)
         {
             if (string.IsNullOrWhiteSpace(skillId)) throw new ArgumentException("Skill ID required.");
             if (level < 1 || level > MaximumLevel) throw new ArgumentOutOfRangeException(nameof(level));
@@ -33,6 +33,13 @@ namespace Idlebound.Foundation
             SkillId = skillId;
             Level = level;
             StoredXp = storedXp;
+        }
+
+        internal void Award(decimal xp, XpCurve curve)
+        {
+            if (xp < 0) throw new ArgumentOutOfRangeException(nameof(xp));
+            StoredXp = checked(StoredXp + xp);
+            Level = Math.Max(Level, curve.KnownLevelFloor(StoredXp));
         }
     }
 
@@ -62,14 +69,28 @@ namespace Idlebound.Foundation
         public string DisplayName { get; }
         public string SkillId { get; }
         public bool IsAvailable { get; }
-        public ActivityDefinition(string id, string displayName, string skillId, bool isAvailable)
+        public int RequiredLevel { get; }
+        public long DurationTicks { get; }
+        public string ResourceId { get; }
+        public decimal? XpPerCycle { get; }
+        public ActivityDefinition(string id, string displayName, string skillId, bool isAvailable, int requiredLevel = 1,
+            long durationTicks = 0, string resourceId = null, decimal? xpPerCycle = null)
         {
             if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(displayName) ||
                 string.IsNullOrWhiteSpace(skillId)) throw new ArgumentException("Activity fields required.");
             Id = id;
             DisplayName = displayName;
             SkillId = skillId;
+            if (requiredLevel < 1 || requiredLevel > 99 || durationTicks < 0 || xpPerCycle < 0)
+                throw new ArgumentOutOfRangeException(nameof(requiredLevel));
+            if ((resourceId == null) != (durationTicks == 0) ||
+                (resourceId != null && string.IsNullOrWhiteSpace(resourceId)))
+                throw new ArgumentException("Gathering needs both a resource and positive duration.");
             IsAvailable = isAvailable;
+            RequiredLevel = requiredLevel;
+            DurationTicks = durationTicks;
+            ResourceId = resourceId;
+            XpPerCycle = xpPerCycle;
         }
     }
 
@@ -142,8 +163,25 @@ namespace Idlebound.Foundation
             if (!characters.Any(c => c.Id == characterId)) { error = "Unknown character."; return false; }
             var activity = Activities.FirstOrDefault(a => a.Id == activityId);
             if (activity == null || !activity.IsAvailable) { error = "Activity unavailable."; return false; }
+            if (characters.First(c => c.Id == characterId).Skills.First(s => s.SkillId == activity.SkillId).Level < activity.RequiredLevel)
+            { error = "Required skill level not reached."; return false; }
             if (assignments.Any(a => a.Key != characterId && a.Value == activityId))
             { error = "Activity already assigned to another character."; return false; }
+            assignments[characterId] = activityId;
+            error = null;
+            return true;
+        }
+
+        public bool TrySwapAssignment(string characterId, string activityId, out string error)
+        {
+            // Validate first; failed requests must not displace either assignment.
+            var activity = Activities.FirstOrDefault(a => a.Id == activityId);
+            var character = characters.FirstOrDefault(c => c.Id == characterId);
+            if (character == null || activity == null || !activity.IsAvailable ||
+                character.Skills.First(s => s.SkillId == activity.SkillId).Level < activity.RequiredLevel)
+            { error = "Character/activity unavailable or level requirement not met."; return false; }
+            var occupant = assignments.FirstOrDefault(a => a.Value == activityId && a.Key != characterId).Key;
+            if (occupant != null) assignments.Remove(occupant);
             assignments[characterId] = activityId;
             error = null;
             return true;

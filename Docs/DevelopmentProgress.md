@@ -1,11 +1,11 @@
 # Development progress
 
-Statuses describe verified work only. Stage 8B-01 scope is recorded in Stage8B01Verification.md. Detailed scopes for later batches and stages 8C–8H remain undefined.
+Statuses describe verified work only. Stage 8B-01 and 8B-02 scopes and verification steps are recorded in their verification documents. Later stage scopes remain pending.
 
 | Stage | Initial status | Evidence / next step |
 | --- | --- | --- |
 | 8A | In progress | 8A-04 repository/static verification and foundation documentation completed; local Unity compilation, scene, and mobile validation pending. Other 8A work is not assessed here. |
-| 8B | In progress | 8B-01 core state, development UI, and EditMode tests added; Unity compilation and runtime validation pending. See Stage8B01Verification.md. |
+| 8B | In progress | 8B-01: user-reported seven manual checks and 14 EditMode cases passed on Windows. 8B-02: gathering, resource inventory, XP policy/loader, source reconciliation and tests implemented; Windows verification pending. |
 | 8C | Not started | Await approved scope. |
 | 8D | Not started | Await approved scope. |
 | 8E | Not started | Await approved scope. |
@@ -26,3 +26,7 @@ Statuses describe verified work only. Stage 8B-01 scope is recorded in Stage8B01
 ## Next verification
 
 Open the project locally using the README instructions, inspect the Console, run SampleScene, and report results. Inspect mobile build support before scheduling platform builds. Do not mark later stages complete without approved scope and supporting evidence.
+
+## Stage 8B-02
+
+See `IdleboundMasterDesign.md` for the four-source reconciliation and preserved numerical tables, and `Stage8B02Verification.md` for exact manual checks and pending specifications. Production XP/action and most level thresholds remain unavailable. An opt-in development fixture is clearly separated from production data. No Unity runtime or NUnit pass is claimed for 8B-02. No packages, networking, recipes, combat, or monetization were added.

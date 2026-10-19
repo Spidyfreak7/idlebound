@@ -1,0 +1,11 @@
+# Source S2 section 5; names expanded by S3/S4. level,metal,wood,fish,leather,cloth,gatherSeconds
+1,Bronze,Common Wood,Shrimp,Worn Leather,Linen,5
+10,Iron,Oak,Sardine,Tanned Leather,Wool,7.8
+20,Steel,Willow,Trout,Hard Leather,Cotton,10.6
+30,Mithril,Maple,Salmon,Reinforced Leather,Silk,13.3
+40,Adamant,Ironwood,Tuna,Thick Hide,Mysticweave,16.1
+50,Orichalcum,Yew,Lobster,Direhide,Moonweave,18.9
+60,Runite,Emberwood,Swordfish,Dragonscale,Emberweave,21.7
+70,Celestium,Elderwood,Shark,Celestial Hide,Starweave,24.4
+80,Aetherium,Spiritwood,Manta Ray,Spirit Hide,Aetherweave,27.2
+90,Astralium,Worldroot,Leviathan Fish,Astralhide,Astralweave,30

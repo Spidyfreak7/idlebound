@@ -15,19 +15,21 @@ A 2D mobile-first idle RPG targeting Android and iOS, using Unity, C#, and a pla
 2. In Unity Hub, choose Add project from disk and select the repository root containing `Assets`, `Packages`, and `ProjectSettings`.
 3. Open with **6000.3.26f1**. Allow Unity to resolve the committed package manifest/lockfile and import assets. Do not upgrade the editor or packages as part of verification.
 4. Open `Assets/Scenes/SampleScene.unity`. Check the Console for compilation/import errors, enter Play mode, and inspect the scene.
-5. Open Window > General > Test Runner to inspect EditMode and PlayMode tests. No project-authored C# tests currently exist; zero tests is not a passing gameplay test.
+5. Open Window > General > Test Runner to inspect EditMode and PlayMode tests. Run the `Idlebound.Foundation.Tests` EditMode assembly. Stage 8B-01 passed 14 cases on Windows per user report; Stage 8B-02 cases still need Unity execution.
 6. For mobile validation, use File > Build Profiles to inspect Android/iOS support and perform a development build on the appropriate host. Device behavior and signing still require separate verification.
 
 No Supabase setup is required to inspect the current template. Backend configuration and integration are not implemented.
 
 ## Project structure
 
-- `Assets/Scenes/`: initial `SampleScene.unity`, enabled in build settings.
+- `Assets/Scenes/`: initial `SampleScene.unity` (enabled in build settings), `IdleboundTest.unity`, and `IdleboundFoundation.unity`. Open the foundation scene manually for Stage 8B-02; see `Docs/Stage8B02Verification.md`.
+- `Assets/Foundation/`: engine-independent state/simulation, resource CSV data, development UI, and Editor tests.
 - `Assets/Settings/`: Universal Render Pipeline asset, 2D renderer, volume profile, input actions, and Lit 2D scene template with its template scene.
 - `Packages/`: committed manifest and dependency lockfile; includes URP 17.3.0 and Unity Test Framework 1.6.0.
 - `ProjectSettings/`: committed editor, rendering, input, and other project configuration.
 - `Docs/DevelopmentProgress.md`: stage status and outstanding validation.
 - `Docs/Architecture.md`: approved architecture scope and deferred decisions.
+- `Docs/IdleboundMasterDesign.md`: reconciliation of four handoffs, status/conflict register, and preserved source tables.
 
 ## Git conventions and verification
 

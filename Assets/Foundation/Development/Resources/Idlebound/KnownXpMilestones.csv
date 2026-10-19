@@ -1,0 +1,7 @@
+# Sparse DEVELOPMENT fixture, not a complete XP curve. No interpolation. level,cumulativeXP
+1,0
+30,500000
+60,2000000
+80,4500000
+90,6500000
+99,10000000

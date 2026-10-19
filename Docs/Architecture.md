@@ -8,10 +8,10 @@ Supabase is the planned backend. Its integration is future work: there is no bac
 
 ## Current repository
 
-The repository contains the Universal 2D foundation: SampleScene, rendering settings, input actions, a Lit 2D scene template, package definitions, and Unity project configuration. The Stage 8A presentation harness and Stage 8B-01 core foundation are present. `Assets/Foundation/Core` separates state and definitions from the development UI and Editor tests. No XP generation or backend integration exists. Documentation is stored outside Assets in `Docs`; see `Stage8B01Verification.md` for prototype constraints and pending design specifications.
+The repository contains the Universal 2D foundation: SampleScene, rendering settings, input actions, a Lit 2D scene template, package definitions, and Unity project configuration. The Stage 8A presentation harness and Stage 8B-01 core foundation are present. `Assets/Foundation/Core` separates state and definitions from the development UI and Editor tests. Stage 8B-02 adds an engine-independent gathering catalog/session, shared resource inventory, validated XP loader, and selected/background XP policy. Production XP/action is unset; an explicit development-only fixture exercises milestone floors without interpolation. No backend integration exists. Documentation is stored outside Assets in `Docs`; see `Stage8B01Verification.md` for prototype constraints and pending design specifications.
 
 ## Future data-driven direction
 
 Future gameplay should follow the approved data-driven direction, with game definitions and tuning data kept distinct from the C# behavior that consumes them. Specific data formats, asset types, schemas, validation, and ownership boundaries remain to be approved. This document does not prescribe additional packages or a folder hierarchy for unimplemented systems.
 
-Progression formulas, reward values, offline progression behavior, synchronization rules, conflict handling, and client/server authority are not defined here. They require explicit design approval before implementation. No mechanics are established or changed by this verification task.
+`IdleboundMasterDesign.md` reconciles approved resource timing/yields, skill names, XP milestones, and selected/background rules from the supplied handoffs. Exact intermediate XP levels, XP/action, full offline replay, synchronization and client/server authority remain unresolved. `Stage8B02Verification.md` distinguishes the current deterministic in-memory policies from production balancing and persistence.
