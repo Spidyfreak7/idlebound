@@ -1,0 +1,32 @@
+# Presentation identities only, from master design S2 section 8. No implemented boss gameplay or ownership.
+# boss|item|iconKey|status
+Goblin Chieftain|Chieftain's Cleaver|sword|unimplemented
+Goblin Chieftain|Goblin Bulwark|shield|unimplemented
+Goblin Chieftain|Chieftain's Lucky Ring|ring|unimplemented
+Fang of the Wilds|Fangstrike Dagger|sword|unimplemented
+Fang of the Wilds|Alpha Hide Boots|boots|unimplemented
+Fang of the Wilds|Mantle of the Wild|cape|unimplemented
+The Crypt Arcanist|Gravecaller's Wand|wand|unimplemented
+The Crypt Arcanist|Tome of Forgotten Rites|book|unimplemented
+The Crypt Arcanist|Arcanist's Pendant|necklace|unimplemented
+The Ironbound Colossus|Colossus Greataxe|sword|unimplemented
+The Ironbound Colossus|Ironbound Platebody|body|unimplemented
+The Ironbound Colossus|Stoneheart Ring|ring|unimplemented
+The Shadow Huntress|Nightfall Longbow|bow|unimplemented
+The Shadow Huntress|Shadowstalker Hood|helm|unimplemented
+The Shadow Huntress|Hunter's Quiver|shield|unimplemented
+The Ember Sovereign|Scepter of Embers|wand|unimplemented
+The Ember Sovereign|Emberwoven Robes|body|unimplemented
+The Ember Sovereign|Sovereign's Cape|cape|unimplemented
+The Fallen King|Kingsbane|sword|unimplemented
+The Fallen King|Crown of the Fallen|helm|unimplemented
+The Fallen King|Royal Signet|ring|unimplemented
+The Tempest Roc|Stormpiercer|bow|unimplemented
+The Tempest Roc|Tempest Mantle|cape|unimplemented
+The Tempest Roc|Stormfeather Boots|boots|unimplemented
+The Void Weaver|Voidbound Tome|book|unimplemented
+The Void Weaver|Veil of Eternity|helm|unimplemented
+The Void Weaver|Voidheart Necklace|necklace|unimplemented
+Astrax, the Worldbreaker|Worldbreaker's Greatsword|sword|unimplemented
+Astrax, the Worldbreaker|Astral Dragonplate|body|unimplemented
+Astrax, the Worldbreaker|Wings of Astrax|cape|unimplemented

@@ -5,7 +5,7 @@ Statuses describe verified work only. Stage 8B-01 through 8B-03B scopes and veri
 | Stage | Initial status | Evidence / next step |
 | --- | --- | --- |
 | 8A | In progress | 8A-04 repository/static verification and foundation documentation completed; local Unity compilation, scene, and mobile validation pending. Other 8A work is not assessed here. |
-| 8B | In progress | 8B-01: user-reported seven manual checks and 14 EditMode cases passed on Windows. 8B-02: user reports all 49 EditMode cases passed and gathering works in Play mode. 8B-03 remains unverified. 8B-03B adds live XP/levels, starter assumptions and refundable production; 153 new cases (255 authored total), Windows validation pending. 8B-04 adds development equipment/combat and 75 new cases (330 authored total); Unity verification pending. |
+| 8B | In progress | 8B-01: user-reported seven manual checks and 14 EditMode cases passed on Windows. 8B-02: user reports all 49 EditMode cases passed and gathering works in Play mode. 8B-03 remains unverified. 8B-03B adds live XP/levels, starter assumptions and refundable production; 153 new cases (255 authored total), Windows validation pending. 8B-04 adds development equipment/combat and 75 new cases (330 authored total); subsequently user-verified 330/330 passed in Unity. |
 | 8C | Not started | Await approved scope. |
 | 8D | Not started | Await approved scope. |
 | 8E | Not started | Await approved scope. |
@@ -42,3 +42,7 @@ Later explicit user approvals supply the common full curve shape/anchors and gat
 ## Stage 8B-04
 
 Implemented development-only equipment and deterministic automatic normal-monster combat in the existing session/UI. Ten slots, atomic bank transactions/instance reuse, requirements, three styles, outgoing triangle, actual-damage XP, HP/death, repeat encounters and guaranteed/independent keyed loot. All 255 existing test cases remain unchanged; 75 new cases bring the authored total to 330. Static checks and the existing progression model passed; Unity compilation, Test Runner execution and Play-mode checks remain pending. No scenes, packages or project settings changed. See `Stage8B04Verification.md` for exact Windows checks and disclosed provisional damage, timing, recovery and identity policies. Stage 8B-05 has not started.
+
+## Stage 8B-05
+
+Baseline Stage 8B-04 has 330/330 user-verified EditMode passes. Added a separate player entry scene, shared session/clock host, tested presentation model and mobile uGUI navigation/screens. Roster, character Overview/Activities/Equipment and Bank use real session data/operations; Shop/Collection Log are unavailable shells. Original pixel-art prototypes are replaceable; final art and reliable offline welcome-back attribution remain deferred. The debug scene/tools are preserved without their former independent clock. All 330 existing tests and simulation implementations remain unchanged; 29 new EditMode cases bring the authored suite to 359, plus 3 PlayMode integration tests. Static/progression-model/syntax checks passed in the cloud; Unity compilation, new tests, actual layout/input/rendering and device testing remain pending. See `Stage8B05Verification.md` and `UIUX.md`. No gameplay balance, packages, startup/build settings or existing scenes changed.

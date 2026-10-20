@@ -1,0 +1,393 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
+using UnityEngine.UI;
+using static Idlebound.Foundation.Development.MobileUiKit;
+
+namespace Idlebound.Foundation.Development
+{
+    public sealed class IdleboundMobileUI : MonoBehaviour
+    {
+        [SerializeField] private Sprite adventurerSprite;
+        [SerializeField] private Sprite enemySprite;
+        private GameSessionHost host;
+        private GameUiModel Model => host.Model;
+        private GatheringSession Session => host.Runtime.Session;
+        private RectTransform safeRoot, body, characterTabs, modalLayer;
+        private ScrollRect scroll;
+        private Text heading, notice;
+        private CanvasScaler canvasScaler;
+        private readonly List<Action> bindings = new List<Action>();
+        private readonly List<Action> modalBindings = new List<Action>();
+        private readonly List<Action> bankBindings = new List<Action>();
+        private readonly List<GridLayoutGroup> grids = new List<GridLayoutGroup>();
+        private readonly HashSet<string> expanded = new HashSet<string>();
+        private readonly Dictionary<MainScreen, Button> mainTabs = new Dictionary<MainScreen, Button>();
+        private string signature;
+        private Action refreshBank;
+        private float nextRefresh;
+        private Rect lastSafe;
+        private Vector2 lastScreen;
+        private int generation;
+        private string localNotice = "", shownFeedback = "";
+        private float feedbackUntil;
+        private bool shopBuy = true;
+        private void Awake()
+        {
+            host = GameSessionHost.Ensure(gameObject);
+            BuildCanvas(); Rebuild(true);
+        }
+        private void BuildCanvas()
+        {
+            var canvasRoot = Node("Idlebound Player Canvas", transform);
+            var canvas = canvasRoot.gameObject.AddComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = canvasRoot.gameObject.AddComponent<CanvasScaler>(); canvasScaler = scaler; scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(480, 854); scaler.matchWidthOrHeight = 0;
+            canvasRoot.gameObject.AddComponent<GraphicRaycaster>(); Surface(canvasRoot, Background);
+            safeRoot = Column(canvasRoot, "Safe Area", 12); Fill(safeRoot);
+            Size(Label(safeRoot, "IDLEBOUND", 30, Gold), 42);
+            heading = Label(safeRoot, "", 21, Muted, 28);
+            notice = Label(safeRoot, "", 18, Gold, 42);
+            characterTabs = Row(safeRoot, 58);
+            var scrollRoot = Node("Screen content", safeRoot); Size(scrollRoot, 0, 1);
+            scroll = scrollRoot.gameObject.AddComponent<ScrollRect>(); scroll.horizontal = false;
+            var viewport = Node("Viewport", scrollRoot); Fill(viewport); Surface(viewport, Background).raycastTarget = true; viewport.gameObject.AddComponent<RectMask2D>();
+            body = Column(viewport, "Content"); body.anchorMin = new Vector2(0,1); body.anchorMax = Vector2.one; body.pivot = new Vector2(.5f,1); body.offsetMin = body.offsetMax = Vector2.zero;
+            var fitter = body.gameObject.AddComponent<ContentSizeFitter>(); fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            scroll.viewport = viewport; scroll.content = body;
+            var nav = Row(safeRoot, 72);
+            foreach (MainScreen screen in Enum.GetValues(typeof(MainScreen)))
+            {
+                var tab = screen;
+                var b = Button(nav, screen == MainScreen.CollectionLog ? "Collection\nLog" : screen.ToString(), () => { Model.Navigate(tab); Rebuild(true); });
+                b.GetComponentInChildren<Text>().fontSize = 19; mainTabs.Add(screen,b);
+            }
+            modalLayer = Node("Modal layer", canvasRoot); Fill(modalLayer); modalLayer.gameObject.SetActive(false);
+            if (FindFirstObjectByType<EventSystem>() == null)
+            {
+                var events = new GameObject("Idlebound EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
+                events.transform.SetParent(transform, false); events.GetComponent<InputSystemUIInputModule>().AssignDefaultActions();
+            }
+            ApplySafeArea();
+        }
+        private void ApplySafeArea()
+        {
+            if (Screen.width <= 0 || Screen.height <= 0) return;
+            canvasScaler.matchWidthOrHeight = Screen.width > Screen.height ? 1 : 0;
+            var safe = Screen.safeArea;
+            safeRoot.anchorMin = new Vector2(safe.xMin / Screen.width, safe.yMin / Screen.height);
+            safeRoot.anchorMax = new Vector2(safe.xMax / Screen.width, safe.yMax / Screen.height);
+            safeRoot.offsetMin = safeRoot.offsetMax = Vector2.zero;
+            modalLayer.anchorMin = safeRoot.anchorMin; modalLayer.anchorMax = safeRoot.anchorMax;
+            modalLayer.offsetMin = modalLayer.offsetMax = Vector2.zero;
+            lastSafe = safe; lastScreen = new Vector2(Screen.width,Screen.height);
+        }
+        private string Structure() => host.Generation + "|" + Session.ActiveCharacterId + "|" + string.Join(";", Session.Inventory.Keys.OrderBy(k => k)) + "|" +
+            string.Join(";", Session.Assignments.OrderBy(p => p.Key).Select(p => p.Key + p.Value)) + "|" + string.Join(";", Session.ProductionJobs.Keys.OrderBy(k => k)) + "|" +
+            string.Join(";", Session.Loadouts.SelectMany(p => p.Value.Slots.Select(q => p.Key + q.Value.InstanceId))) + "|" +
+            string.Join(";", Session.Characters.SelectMany(c => c.Skills.Select(s => s.Level.ToString())));
+        private void Update()
+        {
+            if (host == null || body == null) return;
+            if (lastSafe != Screen.safeArea || lastScreen != new Vector2(Screen.width,Screen.height)) ApplySafeArea();
+            foreach (var grid in grids)
+                if (grid != null) grid.cellSize = new Vector2(Mathf.Max(1, (((RectTransform)grid.transform).rect.width - 16) / 3), grid.gameObject.name == "Skills" ? 92 : 118);
+            if (Time.unscaledTime < nextRefresh) return;
+            nextRefresh = Time.unscaledTime + .1f;
+            string next = Structure();
+            if (next != signature)
+            {
+                if (generation != host.Generation) { CloseModal(); Rebuild(true); }
+                else if (Model.Screen == MainScreen.Bank && !Model.CharacterOpen) { refreshBank?.Invoke(); signature = next; }
+                else Rebuild(false);
+            }
+            foreach (var action in bindings) action();
+            foreach (var action in bankBindings) action();
+            foreach (var action in modalBindings) action();
+            if (shownFeedback != Model.Feedback) { shownFeedback = Model.Feedback; feedbackUntil = Time.unscaledTime + 4; }
+            notice.text = host.ClockError ?? (localNotice.Length > 0 ? localNotice : Time.unscaledTime < feedbackUntil ? shownFeedback : "Prototype • progress is not saved");
+        }
+        private void Bind(Text label, Func<string> value) { bindings.Add(() => { if (label != null) label.text = value(); }); label.text = value(); }
+        private void BindProgress(Image bar, Func<double> value) { bindings.Add(() => { if (bar != null) SetProgress(bar,value()); }); SetProgress(bar,value()); }
+        private void Rebuild(bool resetScroll)
+        {
+            float position = resetScroll ? 1 : scroll.verticalNormalizedPosition;
+            Clear(body); Clear(characterTabs); bindings.Clear(); bankBindings.Clear(); grids.Clear(); refreshBank = null;
+            characterTabs.gameObject.SetActive(Model.CharacterOpen);
+            heading.text = Model.CharacterOpen ? Model.Character(Model.InspectedId).Name + " • " + Model.CharacterTab : Model.Screen == MainScreen.CollectionLog ? "Collection Log" : Model.Screen.ToString();
+            foreach (var tab in mainTabs) tab.Value.GetComponent<Image>().color = tab.Key == Model.Screen ? new Color32(96,78,46,255) : Raised;
+            if (Model.CharacterOpen)
+            {
+                foreach (CharacterScreen tab in Enum.GetValues(typeof(CharacterScreen)))
+                { var t = tab; Button(characterTabs, tab.ToString(), () => { Model.ShowCharacterTab(t); Rebuild(true); }, Model.CharacterTab == tab, 58); }
+                if (Model.CharacterTab == CharacterScreen.Overview) Overview();
+                else if (Model.CharacterTab == CharacterScreen.Activities) Activities();
+                else Equipment();
+            }
+            else if (Model.Screen == MainScreen.Roster) Roster();
+            else if (Model.Screen == MainScreen.Bank) Bank();
+            else if (Model.Screen == MainScreen.Shop) Shop();
+            else Collection();
+            generation = host.Generation; signature = Structure();
+            Canvas.ForceUpdateCanvases(); scroll.verticalNormalizedPosition = position;
+        }
+        private static string Status(CharacterView c) => c.Status == WorkStatus.NeedsAttention ? "Needs Attention" : c.Status.ToString();
+        private string Role(string id) => Session.IsActive(id) ? "ACTIVE • full online XP" : "BACKGROUND • " + Session.BackgroundEfficiency(id, Model.Character(id).SkillId ?? "mining").ToString("P0") + " XP";
+        private void Summary(Transform parent, string id)
+        {
+            var row = Row(parent, 70); Icon(row, "hero", 60);
+            var column = Column(row); Bind(Label(column,"",22,Gold), () => Model.Character(id).Name + " • " + Status(Model.Character(id)));
+            Bind(Label(column,"",18,Muted), () => Role(id));
+            Bind(Label(parent,"",21), () => Model.Character(id).Assignment + " • HP " + Session.Vitals[id].Hp + "/" + Session.Vitals[id].MaxHp);
+            BindProgress(Progress(parent), () => Model.Character(id).Progress);
+        }
+        private void Roster()
+        {
+            var active = Session.ActiveCharacterId;
+            Label(body, "YOUR ACTIVE ADVENTURER", 20, Gold, 32);
+            var top = Card(body); Summary(top,active);
+            var current = Model.Character(active).SkillId;
+            if (current != null) Bind(Label(top,"",19,Muted), () => SkillText(Model.Skills(active).First(s => s.Id == Model.Character(active).SkillId)));
+            Button(top, "Watch & manage", () => { Model.Inspect(active); Rebuild(true); });
+            Label(body, "ROSTER", 20, Gold, 32);
+            foreach (var c in Session.Characters)
+            {
+                var id = c.Id; var card = Card(body); Summary(card,id);
+                Button(card,"Inspect " + c.DisplayName, () => { Model.Inspect(id); Rebuild(true); });
+            }
+            Label(body,"3 available development characters / 9 capacity. Remaining slot unlocks and membership are not implemented.",19,Muted);
+        }
+        private static string SkillText(SkillView s) => s.Name + "  Lv " + s.Level + " • " + s.Xp.ToString("0.##") + " XP" +
+            (s.NextXp.HasValue ? " • " + (s.NextXp.Value - s.Xp).ToString("0.##") + " to next level" : " • 10M XP cap");
+        private void Overview()
+        {
+            string id = Model.InspectedId;
+            var card = Card(body); Summary(card,id);
+            if (!Session.IsActive(id)) Button(card,"Make Active", () => Act(() => Model.MakeActive()));
+            Button(body,Model.SceneCollapsed ? "Expand activity scene" : "Collapse activity scene", () => { Model.SceneCollapsed = !Model.SceneCollapsed; Rebuild(false); },false,52);
+            if (!Model.SceneCollapsed)
+            {
+                var stage = Node("Activity scene",body); Size(stage,200); stage.gameObject.AddComponent<ActivityStage>().Initialize(host,id,adventurerSprite,enemySprite);
+            }
+            else Bind(Label(body,"",20,Muted,40), () => Model.Character(id).Assignment + " • " + Status(Model.Character(id)));
+            var current = Model.Character(id).SkillId;
+            if (current != null)
+            {
+                Bind(Label(body,"",20,Gold), () => SkillText(Model.Skills(id).First(s => s.Id == Model.Character(id).SkillId)));
+                BindProgress(Progress(body), () => (double)Model.Skills(id).First(s => s.Id == Model.Character(id).SkillId).Progress);
+            }
+            Label(body,"SKILLS — tap to choose an activity",20,Gold,32);
+            var grid = Grid(body,"Skills");
+            foreach (var skill in Model.Skills(id))
+            {
+                var key = skill.Id;
+                var b = Button(grid,"", () => { Model.ShowSkill(key); Rebuild(true); });
+                var t = b.GetComponentInChildren<Text>(); t.fontSize = 18;
+                Bind(t, () => { var s = Model.Skills(id).First(k => k.Id == key); return s.Name + "\nLv " + s.Level + " • " + s.Progress.ToString("P0") + "\n" + s.Xp.ToString("0.#") + " XP"; });
+            }
+            Label(body,"In-memory prototype • progress is not saved.",18,Muted,32);
+        }
+        private RectTransform Grid(Transform parent, string name)
+        {
+            var r = Node(name,parent); var g = r.gameObject.AddComponent<GridLayoutGroup>(); g.spacing = new Vector2(8,8);
+            g.constraint = GridLayoutGroup.Constraint.FixedColumnCount; g.constraintCount = 3; g.cellSize = new Vector2(136,name == "Skills" ? 92 : 118);
+            grids.Add(g); return r;
+        }
+        private void Activities()
+        {
+            string id = Model.InspectedId;
+            var compact = Card(body); Summary(compact,id);
+            Button(compact,"Stop / cancel current assignment", () => Act(() => Model.Stop()));
+            Button(body,"Skill: " + Session.Skills.First(s => s.Id == Model.SkillFilter).DisplayName + " — change", () =>
+                Modal("Choose a skill", content =>
+                {
+                    foreach (var skill in Session.Skills)
+                    { var key = skill.Id; Button(content,skill.DisplayName,() => { Model.ShowSkill(key); CloseModal(); Rebuild(true); }); }
+                }));
+            if (new[] { "melee","ranged","magic" }.Contains(Model.SkillFilter))
+                Label(body,"Style follows your mainhand (unarmed = Melee). Change weapons in Equipment. Combat data is development-only.",19,Muted);
+            foreach (var item in Model.Activities())
+            {
+                var a = item; var card = Card(body);
+                var row = Row(card,64); Icon(row,a.Id,50);
+                Button(row,(expanded.Contains(a.Id) ? "− " : "+ ") + a.Name, () => { if (!expanded.Add(a.Id)) expanded.Remove(a.Id); Rebuild(false); }, a.Assigned,64);
+                Bind(Label(card,"",19,a.Locked ? Bad : Muted), () =>
+                {
+                    var v = Model.Activities().First(x => x.Id == a.Id);
+                    return v.Skill + " • Lv " + v.Level + " • " + (v.Locked ? "Locked" : v.Assigned ? "Assigned" : "Available") +
+                        (v.Occupant == null ? "" : " • " + Model.Character(v.Occupant).Name + " is working here");
+                });
+                if (!expanded.Contains(a.Id)) continue;
+                Bind(Label(card,"",20), () => Model.Activities().First(x => x.Id == a.Id).Description);
+                Label(card,GameUiModel.Seconds(a.Duration) + "s" + (a.Kind == "Combat" ? " per player attack" : " per action") + " • " + (a.Xp.HasValue ? a.Xp + " XP / action" : a.Kind == "Combat" ? "XP from actual damage" : "XP not configured"),19,Gold);
+                foreach (var input in a.Inputs)
+                { var stock = input; Bind(Label(card,"",20), () => stock.Name + " • needs " + stock.Required + " / bank " + Session.Quantity(stock.Id)); }
+                if (a.Assigned)
+                {
+                    BindProgress(Progress(card), () => Model.Character(id).Progress);
+                    if (a.Kind == "Production") Bind(Label(card,"",20,Gold), () => Session.ProductionJobs.ContainsKey(id) ? "Job running — ingredients reserved" : "Completed — start another job when ready");
+                    if (a.Kind == "Combat") CombatDetails(card,id,a.Id);
+                }
+                var start = Button(card,a.Occupant == null ? a.Kind == "Production" ? "Start one job" : "Start activity" : "Swap Assignment…", () =>
+                {
+                    if (a.Occupant == null) Act(() => Model.Start(a.Id));
+                    else Confirm("Swap Assignment", "Displace " + Model.Character(a.Occupant).Name + " from " + a.Name + "? They become unassigned. Unfinished production inputs are refunded; progress restarts.", () => Act(() => Model.Start(a.Id,true,a.Occupant)));
+                });
+                bindings.Add(() => { if (start != null) start.interactable = Model.Activities().First(x => x.Id == a.Id).CanStart; });
+            }
+        }
+        private void CombatDetails(Transform parent,string id,string monster)
+        {
+            Bind(Label(parent,"",21,Gold), () => Session.Encounters.TryGetValue(id,out var fight)
+                ? "HP " + Session.Vitals[id].Hp + " / " + Session.Vitals[id].MaxHp + " • enemy HP " + fight.EnemyHp +
+                    "\nNext hit " + GameUiModel.Seconds(fight.PlayerRemainingTicks) + "s • enemy attack " + GameUiModel.Seconds(fight.EnemyRemainingTicks) + "s"
+                : "Combat stopped • " + Status(Model.Character(id)));
+            Bind(Label(parent,"",19,Muted), () => "Defeats by this character: " + Session.KillsFor(id,monster) + " • " + SkillText(Model.Skills(id).First(s => s.Id == Model.SkillFilter)));
+        }
+        private void Act(Func<bool> action)
+        {
+            try { action(); localNotice = ""; }
+            catch (Exception error) { localNotice = error.Message; }
+            Rebuild(false);
+        }
+        private void Equipment()
+        {
+            string id = Model.InspectedId; Label(body,"EQUIPMENT • " + Role(id),20,Gold,42);
+            var profile = Label(body,"",21); Bind(profile, () => { var p = Session.Profile(id); return p.Style + " • Damage " + p.Damage + " • Defense " + p.Defense + " • " + GameUiModel.Seconds(p.IntervalTicks) + "s / attack"; });
+            var layout = Node("Ten-slot loadout",body); Size(layout,570); Surface(layout,Panel);
+            var hero = Node("Character",layout); hero.anchorMin = hero.anchorMax = new Vector2(.5f,.5f); hero.sizeDelta = new Vector2(150,230);
+            var image = hero.gameObject.AddComponent<Image>(); image.sprite = adventurerSprite != null ? adventurerSprite : PixelArtwork.Icon("hero"); image.preserveAspect = true; image.raycastTarget = false;
+            var slots = new[] { EquipmentSlot.Head,EquipmentSlot.Body,EquipmentSlot.Legs,EquipmentSlot.Hands,EquipmentSlot.Feet,EquipmentSlot.Mainhand,EquipmentSlot.Offhand,EquipmentSlot.Necklace,EquipmentSlot.Ring,EquipmentSlot.Cape };
+            var positions = new[] { new Vector2(.5f,.91f),new Vector2(.5f,.69f),new Vector2(.5f,.37f),new Vector2(.15f,.34f),new Vector2(.5f,.12f),new Vector2(.15f,.58f),new Vector2(.85f,.58f),new Vector2(.85f,.82f),new Vector2(.85f,.34f),new Vector2(.15f,.82f) };
+            for (int i = 0; i < slots.Length; i++)
+            {
+                var slot = slots[i]; bool occupied = Session.Loadouts[id].Slots.TryGetValue(slot,out var item);
+                var b = Button(layout,slot.ToString() + (occupied ? "\nEquipped" : "\nEmpty"),() => SlotDetails(slot),occupied);
+                var r = (RectTransform)b.transform; r.anchorMin = r.anchorMax = positions[i]; r.sizeDelta = new Vector2(110,100);
+                b.GetComponentInChildren<Text>().fontSize = 18;
+                var icon = Icon(b.transform,occupied ? item.Definition.Id : slot.ToString(),32); icon.rectTransform.anchorMin = icon.rectTransform.anchorMax = new Vector2(.5f,.76f); icon.rectTransform.anchoredPosition = Vector2.zero;
+                var text = b.GetComponentInChildren<Text>(); text.rectTransform.offsetMax = new Vector2(-5,-32);
+            }
+            Label(body,"Tap a slot to browse bank equipment. Green/red comparisons show changed stats only. Enchanting is not implemented. All current gear stats are development-only.",19,Muted);
+        }
+        private void SlotDetails(EquipmentSlot slot)
+        {
+            Modal(slot.ToString(), content =>
+            {
+                string id = Model.InspectedId;
+                if (Session.Loadouts[id].Slots.TryGetValue(slot,out var current))
+                {
+                    Label(content,current.Definition.Name,22,Gold); Label(content,"Instance " + current.InstanceId,17,Muted);
+                    Button(content,"Unequip to bank",() => { CloseModal(); Act(() => Model.Unequip(slot)); });
+                }
+                var stock = Model.CompatibleStock(slot);
+                if (stock.Length == 0) Label(content,"No compatible equipment in the shared bank. Gather and produce items, then return here.",21);
+                foreach (var item in stock)
+                { var key = item.Id; Button(content,item.Name + " × " + Session.Quantity(key),() => ItemDetails(key)); }
+            });
+        }
+        private void ItemDetails(string id)
+        {
+            Modal(Session.BankItems[id], content =>
+            {
+                Icon(content,id,80); var quantity = Label(content,"Shared bank: " + Session.Quantity(id),23,Gold);
+                modalBindings.Add(() => { if (quantity != null) quantity.text = "Shared bank: " + Session.Quantity(id); });
+                var gear = Session.Equipment.Definitions.FirstOrDefault(g => g.Id == id);
+                if (gear == null) { Label(content,"Materials, products and loot are shared by all characters. Selling and item use are not implemented.",21); return; }
+                Label(content,"Equip for " + Model.Character(Model.InspectedId).Name + " • " + gear.Slot,21);
+                Label(content,"Requires " + string.Join(" / ",gear.Requirements.Select(r => r.Key + " " + r.Value)),20,Muted);
+                Label(content,"DEVELOPMENT stats: damage +" + gear.DamageBonus + ", defense +" + gear.DefenseBonus +
+                    (gear.Style.HasValue ? ", " + gear.Style + " / " + GameUiModel.Seconds(gear.AttackIntervalTicks) + "s" : "") + (gear.TwoHanded ? ". Two-handed: returns offhand to bank." : ""),20,Muted);
+                foreach (var change in Model.Compare(id)) Label(content,change.Name + "  " + change.Before + " → " + change.After,22,change.Improvement ? Good : Bad);
+                var current = Session.Profile(Model.InspectedId);
+                if (gear.Style.HasValue && gear.Style.Value != current.Style) Label(content,"Style  " + current.Style + " → " + gear.Style,21,Gold);
+                Button(content,"Equip / replace",() => { CloseModal(); Act(() => Model.Equip(id)); }).interactable = Session.Quantity(id) > 0;
+            });
+        }
+        private void Bank()
+        {
+            Label(body,"SHARED BANK",22,Gold,36);
+            Button(body,"Equipment target: " + Model.Character(Model.InspectedId).Name + " — change", () => Modal("Choose equipment target", content =>
+            {
+                foreach (var c in Session.Characters)
+                { string id = c.Id; Button(content,c.DisplayName,() => { Model.Inspect(id); Model.Navigate(MainScreen.Bank); CloseModal(); Rebuild(false); }); }
+            }));
+            var search = SearchBox(body,Model.Search);
+            var filters = Row(body,56);
+            foreach (BankFilter filter in Enum.GetValues(typeof(BankFilter)))
+            { var f = filter; var label = filter == BankFilter.Resources ? "Raw" : filter == BankFilter.Equipment ? "Gear" : filter == BankFilter.Products ? "Made" : filter.ToString();
+                Button(filters,label, () => { Model.Filter = f; Rebuild(false); },Model.Filter == f,56).GetComponentInChildren<Text>().fontSize = 17; }
+            var items = Grid(body,"Bank items");
+            refreshBank = () =>
+            {
+                Clear(items); bankBindings.Clear();
+                foreach (var item in Model.Bank())
+                {
+                    var key = item.Id;
+                    var tile = Button(items,"",() => ItemDetails(key));
+                    var icon = Icon(tile.transform,key,52); icon.rectTransform.anchorMin = icon.rectTransform.anchorMax = new Vector2(.5f,.68f); icon.rectTransform.anchoredPosition = Vector2.zero;
+                    var text = tile.GetComponentInChildren<Text>(); text.fontSize = 17; text.alignment = TextAnchor.LowerCenter;
+                    bankBindings.Add(() => { if (text != null) text.text = (item.Type == BankFilter.Equipment ? "GEAR" : item.Type.ToString().ToUpperInvariant()) + "\n× " + Session.Quantity(key); });
+                }
+            };
+            refreshBank(); search.onValueChanged.AddListener(value => { Model.Search = value; refreshBank?.Invoke(); });
+            var empty = Label(body,"",20,Muted); Bind(empty,() => Model.Bank().Length == 0 ? "No matching items. Complete an activity to stock the bank." : "Tap an item for its name, details and equipment actions.");
+            Label(body,"Search and filters organize the display only. Custom tabs/reordering and saved organization are deferred. No selling or fictitious currency.",18,Muted);
+        }
+        private InputField SearchBox(Transform parent,string value)
+        {
+            var r = Node("Search",parent); Size(r,64); var background = Surface(r,Raised); background.raycastTarget = true;
+            var input = r.gameObject.AddComponent<InputField>(); input.targetGraphic = background;
+            var text = Label(r,"",23); Fill(text.rectTransform,12); text.supportRichText = false;
+            var placeholder = Label(r,"Search shared bank…",23,Muted); Fill(placeholder.rectTransform,12);
+            input.textComponent = text; input.placeholder = placeholder; input.lineType = InputField.LineType.SingleLine; input.text = value;
+            return input;
+        }
+        private void Shop()
+        {
+            Label(body,"THE TRADING POST",27,Gold,50);
+            var tabs = Row(body); Button(tabs,"Buy",() => { shopBuy = true; Rebuild(false); },shopBuy); Button(tabs,"Sell",() => { shopBuy = false; Rebuild(false); },!shopBuy);
+            var card = Card(body); Icon(card,"wood",90);
+            Label(card,(shopBuy ? "Buying" : "Selling") + " is not yet implemented.",25,Gold);
+            Label(card,"No purchasable stock, prices, currency or transactions exist. Your shared bank remains available from the Bank tab.",22);
+        }
+        private void Collection()
+        {
+            Label(body,"COLLECTION LOG",27,Gold,50);
+            Label(body,"Boss collections are not yet implemented. No earned uniques or boss kill counts are recorded by the current session.",22);
+            foreach (var collection in BossCollectionShell.All)
+            {
+                var card = Card(body); Button(card,collection.Boss + "  +",() =>
+                    Modal(collection.Boss,content =>
+                    {
+                        Label(content,"Unavailable — boss encounters and ownership tracking are future work.",21,Muted);
+                        foreach (var item in collection.Items)
+                        {
+                            var row = Row(content,76); var silhouette = Icon(row,item.IconKey,50); silhouette.color = new Color32(8,12,16,255);
+                            Label(row,item.Name + "\nNot tracked",19,Muted);
+                        }
+                    }));
+            }
+        }
+        private void Confirm(string title,string message,Action accept)
+        { Modal(title,content => { Label(content,message,22); Button(content,"Confirm Swap Assignment",() => { CloseModal(); accept(); }); }); }
+        private void Modal(string title,Action<RectTransform> build)
+        {
+            modalBindings.Clear(); Clear(modalLayer); modalLayer.gameObject.SetActive(true);
+            var shade = SurfaceOnce(modalLayer,new Color(0,0,0,.88f)); shade.raycastTarget = true;
+            var panel = Column(modalLayer,"Details",18); panel.anchorMin = new Vector2(.06f,.08f); panel.anchorMax = new Vector2(.94f,.92f); panel.offsetMin = panel.offsetMax = Vector2.zero; Surface(panel,Panel);
+            Label(panel,title,26,Gold,70); Button(panel,"Close",CloseModal,false,58);
+            var area = Node("Details scroll",panel); Size(area,0,1); var sr = area.gameObject.AddComponent<ScrollRect>(); sr.horizontal = false;
+            var viewport = Node("Viewport",area); Fill(viewport); viewport.gameObject.AddComponent<RectMask2D>(); Surface(viewport,Panel).raycastTarget = true;
+            var content = Column(viewport); content.anchorMin = new Vector2(0,1); content.anchorMax = Vector2.one; content.pivot = new Vector2(.5f,1); content.offsetMin = content.offsetMax = Vector2.zero;
+            content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            sr.viewport = viewport; sr.content = content; build(content);
+        }
+        private static Image SurfaceOnce(RectTransform rect,Color color)
+        { var image = rect.GetComponent<Image>(); if (image == null) image = rect.gameObject.AddComponent<Image>(); image.color = color; return image; }
+        private void CloseModal() { modalBindings.Clear(); modalLayer.gameObject.SetActive(false); Clear(modalLayer); }
+    }
+}

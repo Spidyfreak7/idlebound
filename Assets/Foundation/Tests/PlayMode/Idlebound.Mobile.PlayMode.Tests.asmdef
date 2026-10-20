@@ -1,0 +1,5 @@
+{
+  "name": "Idlebound.Mobile.PlayMode.Tests",
+  "references": ["Idlebound.Foundation", "Idlebound.Foundation.Development", "Unity.ugui", "Unity.InputSystem"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}

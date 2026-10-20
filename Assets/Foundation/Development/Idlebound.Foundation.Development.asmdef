@@ -1,6 +1,8 @@
 {
   "name": "Idlebound.Foundation.Development",
   "references": [
-    "Idlebound.Foundation"
+    "Idlebound.Foundation",
+    "Unity.ugui",
+    "Unity.InputSystem"
   ]
 }

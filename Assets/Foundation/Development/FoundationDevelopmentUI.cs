@@ -7,104 +7,23 @@ namespace Idlebound.Foundation.Development
     // IMGUI is a development harness, not the final production UI.
     public sealed class FoundationDevelopmentUI : MonoBehaviour
     {
-        private GatheringSession session;
+        private GameSessionHost host;
+        private GatheringSession session => host != null ? host.Runtime.Session : null;
         private Vector2 scroll;
         private string inspected = "character-1";
         private string skillFilter = "mining";
-        private string message = "Gathering ready. Production XP/action is unresolved; XP stays zero by default.";
-        private string gearData, combatRulesData, monstersData, lootData;
-        private string tierData;
-        private string xpData;
-        private string productionData;
-        private string gatheringXpData;
-        private string fullXpData;
-        private string developmentProductionData;
+        private string message = "Development harness • the session host owns the only clock.";
         private bool developmentRecipes;
         private string productionFilter = "smithing";
-        private bool running = true;
-        private double fractionalTicks;
-        private double previousTime;
-        private bool applicationPaused;
-        private bool applicationFocused = true;
-
-        private void Awake()
-        {
-            var gear = Resources.Load<TextAsset>("Idlebound/DevelopmentGear");
-            var rules = Resources.Load<TextAsset>("Idlebound/DevelopmentCombatRules");
-            var monsters = Resources.Load<TextAsset>("Idlebound/DevelopmentMonsters");
-            var loot = Resources.Load<TextAsset>("Idlebound/DevelopmentLoot");
-            var tiers = Resources.Load<TextAsset>("Idlebound/ResourceTiers");
-            var xp = Resources.Load<TextAsset>("Idlebound/KnownXpMilestones");
-            var recipes = Resources.Load<TextAsset>("Idlebound/StarterProductionRecipes");
-            var samples = Resources.Load<TextAsset>("Idlebound/DevelopmentProductionRecipes");
-            var rewards = Resources.Load<TextAsset>("Idlebound/GatheringXp");
-            var fullCurve = Resources.Load<TextAsset>("Idlebound/ProductionXpCurve");
-            if (gear == null || rules == null || monsters == null || loot == null || tiers == null || xp == null || recipes == null || samples == null || rewards == null || fullCurve == null)
-            {
-                Debug.LogError("Idlebound foundation catalog missing; development harness disabled.");
-                enabled = false;
-                return;
-            }
-            gearData = gear.text; combatRulesData = rules.text; monstersData = monsters.text; lootData = loot.text;
-            tierData = tiers.text;
-            xpData = xp.text;
-            productionData = recipes.text;
-            gatheringXpData = rewards.text;
-            fullXpData = fullCurve.text;
-            developmentProductionData = samples.text;
-            ResetSession(false);
-        }
-
+        private bool running => host.Running;
+        private void Awake() { host = GameSessionHost.Ensure(gameObject); }
         private void ResetSession(bool fixture)
         {
-            var catalog = fixture ? GatheringCatalog.Load(tierData, true) : GatheringCatalog.LoadProduction(tierData, gatheringXpData);
-            var production = ProductionCatalog.Load(productionData + "\n" +
-                (developmentRecipes ? developmentProductionData : ""), catalog.Resources, developmentRecipes);
-            session = new GatheringSession(catalog, XpCurve.Load(fixture ? xpData : fullXpData, fixture), production, refundCancelledInputs: true,
-                equipment: EquipmentCatalog.LoadDevelopment(gearData),
-                combat: CombatCatalog.LoadDevelopment(combatRulesData, monstersData, lootData));
+            host.ResetSession(fixture, developmentRecipes);
             inspected = "character-1";
-            fractionalTicks = 0;
-            previousTime = Time.realtimeSinceStartupAsDouble;
-            message = fixture
-                ? "DEVELOPMENT ONLY: 100000 XP/cycle, sparse milestone level floor. Not production balancing."
-                : "Live progression: approved gathering XP, full reconstructed curve, starter recipe assumptions and cancellation refunds.";
+            message = "Explicit development reset. All state is in memory.";
         }
-
-        private void Update()
-        {
-            // Accumulate one contiguous absence and settle it once on return.
-            if (!applicationPaused && applicationFocused) SettleClock(false);
-        }
-
-        private void OnApplicationPause(bool paused) => ChangePresence(paused, applicationFocused);
-        private void OnApplicationFocus(bool focused) => ChangePresence(applicationPaused, focused);
-
-        private void ChangePresence(bool paused, bool focused)
-        {
-            bool wasAway = applicationPaused || !applicationFocused;
-            bool nowAway = paused || !focused;
-            if (wasAway != nowAway) SettleClock(wasAway);
-            applicationPaused = paused;
-            applicationFocused = focused;
-        }
-
-        private void SettleClock(bool offline)
-        {
-            double now = Time.realtimeSinceStartupAsDouble;
-            double elapsed = Math.Max(0, now - previousTime);
-            previousTime = now;
-            if (!running || session == null) return;
-            fractionalTicks += elapsed * TimeSpan.TicksPerSecond;
-            long ticks = (long)Math.Floor(fractionalTicks);
-            fractionalTicks -= ticks;
-            session.SettleTo(checked(session.LastSettledTicks + ticks), offline);
-        }
-
-        private void Step(int seconds, bool offline = false)
-        {
-            session.SettleTo(checked(session.LastSettledTicks + seconds * TimeSpan.TicksPerSecond), offline);
-        }
+        private void Step(int seconds, bool offline = false) { host.Step(seconds, offline); }
 
         private void OnGUI()
         {
@@ -122,7 +41,7 @@ namespace Idlebound.Foundation.Development
             {
                 GUILayout.BeginArea(new Rect(16, 12, 688, safe.height / scale - 24));
                 scroll = GUILayout.BeginScrollView(scroll);
-                GUILayout.Label("IDLEBOUND — Stage 8B-04", title);
+                GUILayout.Label("IDLEBOUND — Development mode (8B-05)", title);
                 GUILayout.Label("In-memory development state • no save/cloud", label);
                 GUILayout.Label(session.UsesDevelopmentXp
                     ? "DEVELOPMENT XP FIXTURE: 100000/cycle. Level is a known milestone floor only."
@@ -145,8 +64,7 @@ namespace Idlebound.Foundation.Development
                 }
                 if (GUILayout.Button(running ? "Pause automatic time" : "Resume automatic time", button, GUILayout.MinHeight(60)))
                 {
-                    running = !running;
-                    previousTime = Time.realtimeSinceStartupAsDouble;
+                    host.SetRunning(!running);
                 }
                 GUI.enabled = previousEnabled && !running;
                 if (GUILayout.Button("Advance 1 second (paused)", button, GUILayout.MinHeight(60))) Step(1);
