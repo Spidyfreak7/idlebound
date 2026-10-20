@@ -1,7 +1,8 @@
 {
   "name": "Idlebound.Foundation.Tests",
   "references": [
-    "Idlebound.Foundation"
+    "Idlebound.Foundation",
+    "Idlebound.Foundation.Development"
   ],
   "includePlatforms": [
     "Editor"

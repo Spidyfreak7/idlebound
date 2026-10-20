@@ -152,7 +152,7 @@ namespace Idlebound.Foundation.Tests
             var m = Model(); m.Inspect(C); Gear(m); m.ShowSkill("melee"); Assert.That(m.Start("dev-chicken"),Is.True);
             m.Runtime.Tick(owner,6);
             Assert.That(m.Character(C).Hp,Is.EqualTo(49)); Assert.That(m.Session.Encounters[C].EnemyHp,Is.EqualTo(12));
-            Assert.That(m.Skills(C).First(s => s.Id == "melee").Xp,Is.EqualTo(12));
+            Assert.That(m.Skills(C).First(s => s.Id == "melee").Xp,Is.EqualTo(36));
             Assert.That(m.Session.KillsFor(C,"dev-chicken"),Is.EqualTo(1)); Assert.That(m.Bank().First(i => i.Id == "dev-feather").Quantity,Is.EqualTo(1));
         }
         [Test]
@@ -238,6 +238,21 @@ namespace Idlebound.Foundation.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => m.Runtime.Tick(owner,double.NaN));
             Assert.Throws<ArgumentException>(() => m.Navigate((MainScreen)100));
             Assert.Throws<ArgumentException>(() => m.Inspect("missing")); Assert.Throws<ArgumentException>(() => m.ShowSkill("missing"));
+        }
+        [Test]
+        public void BankNamesComeFromCatalogAndRefreshWithoutMutatingInventory()
+        {
+            var m = Model(); Assign(m); m.Runtime.Tick(owner,5);
+            var first = m.Bank().Single(i => i.Id == "metal-1");
+            Assert.That(first.Name,Is.EqualTo(m.Session.Catalog.Resources.First(r => r.Id == first.Id).DisplayName));
+            Assert.That(first.Quantity,Is.EqualTo(1));
+            m.Navigate(MainScreen.Bank); m.Runtime.Tick(owner,10);
+            var second = m.Bank().Single(i => i.Id == first.Id);
+            Assert.That(second.Name,Is.EqualTo(first.Name)); Assert.That(second.Quantity,Is.EqualTo(2));
+            var before = m.Session.Inventory.ToArray(); m.Search = second.Name.ToUpperInvariant(); m.Filter = BankFilter.Resources;
+            Assert.That(m.Bank().Any(i => i.Id == second.Id),Is.True);
+            m.Search = second.Id; Assert.That(m.Bank().Single().Name,Is.EqualTo(second.Name));
+            Assert.That(m.Session.Inventory,Is.EquivalentTo(before)); Assert.That(m.Session.Assignments[C],Is.EqualTo("mining-1"));
         }
     }
 }

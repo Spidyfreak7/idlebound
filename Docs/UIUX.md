@@ -13,4 +13,10 @@ The explicit Stage 8B-05 request supplies the current interaction authority; the
 - No screen owns simulation time. Only `GameSessionHost` drives its registered `SessionRuntime`; navigation and visuals read/project the shared session. Cosmetics never generate rewards or insert extra simulated time.
 - Offline return report is deferred until real per-character reward attribution exists. No fictitious summary is shown.
 
-See `Stage 8B05Verification.md` for precise scope, clock/timing policies, known limitations and Windows verification. Device layout, input, performance and accessibility approval remain pending actual Unity testing.
+See `Stage8B05Verification.md` for precise scope, clock/timing policies, known limitations and Windows verification. Device layout, input, performance and accessibility approval remain pending actual Unity testing.
+
+## Stage 8B-05B playtest revisions
+
+The later explicit approval replaces the crowded Equipment cards with compact square icon slots around a reserved, larger static character. Slot names, equipped status, requirements and comparisons belong in details rather than repeated grid captions. All ten slots and existing atomic actions remain. Bank tiles now show actual catalog names and separate live quantities in a two-column grid; categories remain filters. No items are renamed.
+
+Development combat XP is now 3/3/1.5 per actual damage for Melee/Ranged/Magic, explicitly a **provisional playtest baseline**. The common curve and all other gameplay mechanics are unchanged. See `Stage8B05BVerification.md` for current XP examples, the complete file manifest and exact Unity checks; earlier stage XP examples are historical.

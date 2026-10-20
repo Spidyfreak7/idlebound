@@ -35,6 +35,9 @@ namespace Idlebound.Foundation.Development
         private string localNotice = "", shownFeedback = "";
         private float feedbackUntil;
         private bool shopBuy = true;
+        private RectTransform equipmentPanel, equipmentHero;
+        private readonly Dictionary<EquipmentSlot, RectTransform> equipmentButtons = new Dictionary<EquipmentSlot, RectTransform>();
+        private float equipmentWidth = -1;
         private void Awake()
         {
             host = GameSessionHost.Ensure(gameObject);
@@ -93,8 +96,10 @@ namespace Idlebound.Foundation.Development
         {
             if (host == null || body == null) return;
             if (lastSafe != Screen.safeArea || lastScreen != new Vector2(Screen.width,Screen.height)) ApplySafeArea();
+            ApplyEquipmentLayout();
             foreach (var grid in grids)
-                if (grid != null) grid.cellSize = new Vector2(Mathf.Max(1, (((RectTransform)grid.transform).rect.width - 16) / 3), grid.gameObject.name == "Skills" ? 92 : 118);
+                if (grid != null) grid.cellSize = new Vector2(Mathf.Max(1, (((RectTransform)grid.transform).rect.width - grid.spacing.x * (grid.constraintCount - 1)) / grid.constraintCount),
+                    grid.gameObject.name == "Skills" ? 92 : grid.gameObject.name == "Bank items" ? 184 : 118);
             if (Time.unscaledTime < nextRefresh) return;
             nextRefresh = Time.unscaledTime + .1f;
             string next = Structure();
@@ -115,6 +120,7 @@ namespace Idlebound.Foundation.Development
         private void Rebuild(bool resetScroll)
         {
             float position = resetScroll ? 1 : scroll.verticalNormalizedPosition;
+            equipmentPanel = equipmentHero = null; equipmentButtons.Clear(); equipmentWidth = -1;
             Clear(body); Clear(characterTabs); bindings.Clear(); bankBindings.Clear(); grids.Clear(); refreshBank = null;
             characterTabs.gameObject.SetActive(Model.CharacterOpen);
             heading.text = Model.CharacterOpen ? Model.Character(Model.InspectedId).Name + " • " + Model.CharacterTab : Model.Screen == MainScreen.CollectionLog ? "Collection Log" : Model.Screen.ToString();
@@ -132,7 +138,7 @@ namespace Idlebound.Foundation.Development
             else if (Model.Screen == MainScreen.Shop) Shop();
             else Collection();
             generation = host.Generation; signature = Structure();
-            Canvas.ForceUpdateCanvases(); scroll.verticalNormalizedPosition = position;
+            Canvas.ForceUpdateCanvases(); ApplyEquipmentLayout(); scroll.verticalNormalizedPosition = position;
         }
         private static string Status(CharacterView c) => c.Status == WorkStatus.NeedsAttention ? "Needs Attention" : c.Status.ToString();
         private string Role(string id) => Session.IsActive(id) ? "ACTIVE • full online XP" : "BACKGROUND • " + Session.BackgroundEfficiency(id, Model.Character(id).SkillId ?? "mining").ToString("P0") + " XP";
@@ -193,7 +199,7 @@ namespace Idlebound.Foundation.Development
         private RectTransform Grid(Transform parent, string name)
         {
             var r = Node(name,parent); var g = r.gameObject.AddComponent<GridLayoutGroup>(); g.spacing = new Vector2(8,8);
-            g.constraint = GridLayoutGroup.Constraint.FixedColumnCount; g.constraintCount = 3; g.cellSize = new Vector2(136,name == "Skills" ? 92 : 118);
+            g.constraint = GridLayoutGroup.Constraint.FixedColumnCount; g.constraintCount = name == "Bank items" ? 2 : 3; g.cellSize = new Vector2(name == "Bank items" ? 216 : 136,name == "Skills" ? 92 : name == "Bank items" ? 184 : 118);
             grids.Add(g); return r;
         }
         private void Activities()
@@ -257,22 +263,38 @@ namespace Idlebound.Foundation.Development
         {
             string id = Model.InspectedId; Label(body,"EQUIPMENT • " + Role(id),20,Gold,42);
             var profile = Label(body,"",21); Bind(profile, () => { var p = Session.Profile(id); return p.Style + " • Damage " + p.Damage + " • Defense " + p.Defense + " • " + GameUiModel.Seconds(p.IntervalTicks) + "s / attack"; });
-            var layout = Node("Ten-slot loadout",body); Size(layout,570); Surface(layout,Panel);
-            var hero = Node("Character",layout); hero.anchorMin = hero.anchorMax = new Vector2(.5f,.5f); hero.sizeDelta = new Vector2(150,230);
-            var image = hero.gameObject.AddComponent<Image>(); image.sprite = adventurerSprite != null ? adventurerSprite : PixelArtwork.Icon("hero"); image.preserveAspect = true; image.raycastTarget = false;
-            var slots = new[] { EquipmentSlot.Head,EquipmentSlot.Body,EquipmentSlot.Legs,EquipmentSlot.Hands,EquipmentSlot.Feet,EquipmentSlot.Mainhand,EquipmentSlot.Offhand,EquipmentSlot.Necklace,EquipmentSlot.Ring,EquipmentSlot.Cape };
-            var positions = new[] { new Vector2(.5f,.91f),new Vector2(.5f,.69f),new Vector2(.5f,.37f),new Vector2(.15f,.34f),new Vector2(.5f,.12f),new Vector2(.15f,.58f),new Vector2(.85f,.58f),new Vector2(.85f,.82f),new Vector2(.85f,.34f),new Vector2(.15f,.82f) };
-            for (int i = 0; i < slots.Length; i++)
+            equipmentPanel = Node("Ten-slot loadout",body); Size(equipmentPanel,EquipmentLayout.Height); Surface(equipmentPanel,Panel);
+            equipmentHero = Node("Character",equipmentPanel);
+            var image = equipmentHero.gameObject.AddComponent<Image>(); image.sprite = adventurerSprite != null ? adventurerSprite : PixelArtwork.Icon("hero"); image.preserveAspect = true; image.raycastTarget = false;
+            foreach (EquipmentSlot slot in Enum.GetValues(typeof(EquipmentSlot)))
             {
-                var slot = slots[i]; bool occupied = Session.Loadouts[id].Slots.TryGetValue(slot,out var item);
-                var b = Button(layout,slot.ToString() + (occupied ? "\nEquipped" : "\nEmpty"),() => SlotDetails(slot),occupied);
-                var r = (RectTransform)b.transform; r.anchorMin = r.anchorMax = positions[i]; r.sizeDelta = new Vector2(110,100);
-                b.GetComponentInChildren<Text>().fontSize = 18;
-                var icon = Icon(b.transform,occupied ? item.Definition.Id : slot.ToString(),32); icon.rectTransform.anchorMin = icon.rectTransform.anchorMax = new Vector2(.5f,.76f); icon.rectTransform.anchoredPosition = Vector2.zero;
-                var text = b.GetComponentInChildren<Text>(); text.rectTransform.offsetMax = new Vector2(-5,-32);
+                var selectedSlot = slot;
+                bool occupied = Session.Loadouts[id].Slots.TryGetValue(slot,out var item);
+                var button = Button(equipmentPanel,"",() => SlotDetails(selectedSlot),occupied);
+                button.name = "Slot " + slot;
+                button.GetComponentInChildren<Text>().gameObject.SetActive(false);
+                var rect = (RectTransform)button.transform;
+                equipmentButtons.Add(slot,rect);
+                var icon = Icon(button.transform,occupied ? item.Definition.Id : slot.ToString());
+                Fill(icon.rectTransform,10);
+                icon.color = occupied ? Ink : new Color(Muted.r,Muted.g,Muted.b,.55f);
             }
             Label(body,"Tap a slot to browse bank equipment. Green/red comparisons show changed stats only. Enchanting is not implemented. All current gear stats are development-only.",19,Muted);
         }
+        private void ApplyEquipmentLayout()
+        {
+            if (equipmentPanel == null || equipmentPanel.rect.width < 200 || Mathf.Approximately(equipmentWidth,equipmentPanel.rect.width)) return;
+            equipmentWidth = equipmentPanel.rect.width;
+            var geometry = new EquipmentLayout(equipmentWidth);
+            PlaceEquipment(equipmentHero,geometry.CharacterBounds);
+            foreach (var pair in equipmentButtons) PlaceEquipment(pair.Value,geometry.Slots[pair.Key]);
+        }
+        private static void PlaceEquipment(RectTransform rect,Rect bounds)
+        {
+            rect.anchorMin = rect.anchorMax = Vector2.zero; rect.pivot = new Vector2(.5f,.5f);
+            rect.anchoredPosition = bounds.center; rect.sizeDelta = bounds.size;
+        }
+        private static string Requirements(EquipmentDefinition gear) => "Requires " + string.Join(" / ",gear.Requirements.Select(r => r.Key + " " + r.Value));
         private void SlotDetails(EquipmentSlot slot)
         {
             Modal(slot.ToString(), content =>
@@ -280,9 +302,13 @@ namespace Idlebound.Foundation.Development
                 string id = Model.InspectedId;
                 if (Session.Loadouts[id].Slots.TryGetValue(slot,out var current))
                 {
-                    Label(content,current.Definition.Name,22,Gold); Label(content,"Instance " + current.InstanceId,17,Muted);
+                    Label(content,"Equipped: " + current.Definition.Name,22,Gold);
+                    Label(content,Requirements(current.Definition),20,Muted); Label(content,"Instance " + current.InstanceId,17,Muted);
+                    Button(content,"Inspect equipped item",() => ItemDetails(current.Definition.Id));
                     Button(content,"Unequip to bank",() => { CloseModal(); Act(() => Model.Unequip(slot)); });
                 }
+                else Label(content,"Empty " + slot + " slot",22,Muted);
+                Label(content,"Compatible replacements • shared bank",20,Gold);
                 var stock = Model.CompatibleStock(slot);
                 if (stock.Length == 0) Label(content,"No compatible equipment in the shared bank. Gather and produce items, then return here.",21);
                 foreach (var item in stock)
@@ -298,7 +324,9 @@ namespace Idlebound.Foundation.Development
                 var gear = Session.Equipment.Definitions.FirstOrDefault(g => g.Id == id);
                 if (gear == null) { Label(content,"Materials, products and loot are shared by all characters. Selling and item use are not implemented.",21); return; }
                 Label(content,"Equip for " + Model.Character(Model.InspectedId).Name + " • " + gear.Slot,21);
-                Label(content,"Requires " + string.Join(" / ",gear.Requirements.Select(r => r.Key + " " + r.Value)),20,Muted);
+                bool equipped = Session.Loadouts[Model.InspectedId].Slots.TryGetValue(gear.Slot,out var worn) && worn.Definition.Id == id;
+                Label(content,equipped ? "Currently equipped — bank quantity counts spare copies only" : "Bank replacement for this slot",20,Gold);
+                Label(content,Requirements(gear),20,Muted);
                 Label(content,"DEVELOPMENT stats: damage +" + gear.DamageBonus + ", defense +" + gear.DefenseBonus +
                     (gear.Style.HasValue ? ", " + gear.Style + " / " + GameUiModel.Seconds(gear.AttackIntervalTicks) + "s" : "") + (gear.TwoHanded ? ". Two-handed: returns offhand to bank." : ""),20,Muted);
                 foreach (var change in Model.Compare(id)) Label(content,change.Name + "  " + change.Before + " → " + change.After,22,change.Improvement ? Good : Bad);
@@ -327,10 +355,18 @@ namespace Idlebound.Foundation.Development
                 foreach (var item in Model.Bank())
                 {
                     var key = item.Id;
-                    var tile = Button(items,"",() => ItemDetails(key));
-                    var icon = Icon(tile.transform,key,52); icon.rectTransform.anchorMin = icon.rectTransform.anchorMax = new Vector2(.5f,.68f); icon.rectTransform.anchoredPosition = Vector2.zero;
-                    var text = tile.GetComponentInChildren<Text>(); text.fontSize = 17; text.alignment = TextAnchor.LowerCenter;
-                    bankBindings.Add(() => { if (text != null) text.text = (item.Type == BankFilter.Equipment ? "GEAR" : item.Type.ToString().ToUpperInvariant()) + "\n× " + Session.Quantity(key); });
+                    var tile = Button(items,"",() => ItemDetails(key)); tile.name = "Bank item: " + key;
+                    var icon = Icon(tile.transform,key,56); icon.rectTransform.anchorMin = icon.rectTransform.anchorMax = new Vector2(.5f,.76f); icon.rectTransform.anchoredPosition = Vector2.zero;
+                    var text = tile.GetComponentInChildren<Text>(); text.name = "Item name"; text.fontSize = 20; text.alignment = TextAnchor.MiddleCenter;
+                    text.text = item.Name;
+                    text.rectTransform.anchorMin = Vector2.zero; text.rectTransform.anchorMax = new Vector2(1,.48f);
+                    text.rectTransform.offsetMin = new Vector2(8,8); text.rectTransform.offsetMax = new Vector2(-8,0);
+                    text.resizeTextForBestFit = true; text.resizeTextMinSize = 18; text.resizeTextMaxSize = 20;
+                    var quantity = Label(tile.transform,"× " + Session.Quantity(key),21,Gold); quantity.name = "Quantity"; quantity.alignment = TextAnchor.MiddleRight;
+                    quantity.rectTransform.anchorMin = new Vector2(.05f,.49f); quantity.rectTransform.anchorMax = new Vector2(.95f,.65f);
+                    quantity.rectTransform.offsetMin = quantity.rectTransform.offsetMax = Vector2.zero;
+                    quantity.resizeTextForBestFit = true; quantity.resizeTextMinSize = 12; quantity.resizeTextMaxSize = 21;
+                    bankBindings.Add(() => { if (quantity != null) quantity.text = "× " + Session.Quantity(key); });
                 }
             };
             refreshBank(); search.onValueChanged.AddListener(value => { Model.Search = value; refreshBank?.Invoke(); });

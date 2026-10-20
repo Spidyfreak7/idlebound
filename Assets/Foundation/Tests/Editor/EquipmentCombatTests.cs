@@ -164,9 +164,9 @@ namespace Idlebound.Foundation.Tests
             s.SettleTo(T(4)); Assert.That(Xp(s), Is.EqualTo(3));
         }
 
-        [TestCase("bronze-dagger-item", "melee", 5)]
-        [TestCase("wood-shortbow-item", "ranged", 2.5)]
-        [TestCase("wood-wand-item", "magic", 5)]
+        [TestCase("bronze-dagger-item", "melee", 15)]
+        [TestCase("wood-shortbow-item", "ranged", 7.5)]
+        [TestCase("wood-wand-item", "magic", 15)]
         public void EquippedStyleDeterminesDamageAndXpSkill(string item, string skill, double expectedXp)
         {
             var s = Session(); s.GrantDevelopmentGearKitAt(0); Equip(s, item); Fight(s);
@@ -330,7 +330,7 @@ namespace Idlebound.Foundation.Tests
             Assert.That(s.StartProductionAt(T(10), C, "bronze-dagger", false, out _), Is.True);
             s.SettleTo(T(25)); Equip(s, "bronze-dagger-item"); Assert.That(s.Quantity("bronze-dagger-item"), Is.Zero);
             Fight(s); s.SettleTo(T(31));
-            Assert.That(s.Quantity("dev-feather"), Is.EqualTo(1)); Assert.That(Xp(s), Is.EqualTo(12));
+            Assert.That(s.Quantity("dev-feather"), Is.EqualTo(1)); Assert.That(Xp(s), Is.EqualTo(36));
             Assert.That(s.KillsFor(C, "dev-chicken"), Is.EqualTo(1));
         }
 
@@ -342,7 +342,7 @@ namespace Idlebound.Foundation.Tests
             Assert.That(s.Encounters[C].PlayerRemainingTicks, Is.EqualTo(T(2)));
             Assert.That(s.Encounters[C].EnemyRemainingTicks, Is.EqualTo(T(2)));
             Assert.That(s.Encounters[C].EnemyHp, Is.EqualTo(12)); Assert.That(s.Vitals[C].Hp, Is.EqualTo(hp));
-            s.SettleTo(T(3)); Assert.That(Xp(s, "magic"), Is.EqualTo(5));
+            s.SettleTo(T(3)); Assert.That(Xp(s, "magic"), Is.EqualTo(15));
             Assert.That(Xp(s), Is.Zero);
         }
 
@@ -350,7 +350,7 @@ namespace Idlebound.Foundation.Tests
         public void StoppingPreservesHpAndDiscardsEnemyProgressOnly()
         {
             var s = Session(); Fight(s); s.SettleTo(T(3)); s.UnassignAt(T(3), C);
-            Assert.That(s.Vitals[C].Hp, Is.EqualTo(49)); Assert.That(Xp(s), Is.EqualTo(2));
+            Assert.That(s.Vitals[C].Hp, Is.EqualTo(49)); Assert.That(Xp(s), Is.EqualTo(6));
             s.SettleTo(T(10)); Assert.That(s.Vitals[C].Hp, Is.EqualTo(49)); Fight(s);
             Assert.That(s.Encounters[C].EnemyHp, Is.EqualTo(12));
             Assert.That(s.RestoreDevelopmentHpAt(T(10), C, out _), Is.False);
@@ -470,6 +470,43 @@ namespace Idlebound.Foundation.Tests
             Assert.That(values.All(v => v >= 0 && v < 1), Is.True);
             Assert.That(values, Is.EqualTo(Enumerable.Range(1, 100).Select(i => roller.Roll(C, "dev-test", i, "drop")).ToArray()));
             Assert.That(values.Distinct().Count(), Is.GreaterThan(1));
+        }
+        [TestCase(CombatStyle.Melee, 3)]
+        [TestCase(CombatStyle.Ranged, 3)]
+        [TestCase(CombatStyle.Magic, 1.5)]
+        public void DevelopmentCsvUsesApprovedProvisionalCombatXp(CombatStyle style, double expected)
+        {
+            Assert.That(Combat().Rules.XpPerDamage(style),Is.EqualTo((decimal)expected));
+            Assert.That(Combat().Rules.MagicXpPerDamage,Is.EqualTo(Combat().Rules.MeleeXpPerDamage / 2));
+        }
+
+        [TestCase("bronze-dagger-item", "melee", 6, 36)]
+        [TestCase("wood-shortbow-item", "ranged", 10, 36)]
+        [TestCase("wood-wand-item", "magic", 4, 18)]
+        public void DevelopmentRebalancePaysActualDamageWithoutOverkillOrDuplicateRewards(string item,string skill,int seconds,int expected)
+        {
+            var s = Session(); s.GrantDevelopmentGearKitAt(0); Equip(s,item); Fight(s);
+            s.SettleTo(T(seconds)); Assert.That(Xp(s,skill),Is.EqualTo(expected));
+            Assert.That(s.KillsFor(C,"dev-chicken"),Is.EqualTo(1)); Assert.That(s.Quantity("dev-feather"),Is.EqualTo(1));
+            s.SettleTo(T(seconds)); Assert.That(Xp(s,skill),Is.EqualTo(expected));
+            Assert.That(s.KillsFor(C,"dev-chicken"),Is.EqualTo(1)); Assert.That(s.Quantity("dev-feather"),Is.EqualTo(1));
+        }
+
+        [TestCase(false, false, false, 36)]
+        [TestCase(true, false, false, 0)]
+        [TestCase(false, true, false, 0)]
+        [TestCase(true, true, false, 0)]
+        [TestCase(true, false, true, 18)]
+        [TestCase(false, true, true, 18)]
+        [TestCase(true, true, true, 18)]
+        [TestCase(false, false, true, 36)]
+        public void DevelopmentRebalanceRetainsXpEligibilityAndHalfCap(bool background,bool offline,bool effects,int expected)
+        {
+            var s = Session(); string id = background ? D : C;
+            if (effects) s.SetEffectsAt(0,id,new[] { new BackgroundXpEffect("test-only","melee",.8m) });
+            Fight(s,character: id); s.SettleTo(T(12),offline);
+            Assert.That(Xp(s,"melee",id),Is.EqualTo(expected));
+            Assert.That(s.Quantity("dev-feather"),Is.EqualTo(1));
         }
     }
 }
