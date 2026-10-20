@@ -16,7 +16,8 @@ namespace Idlebound.Foundation.Development
         private GameSessionHost host;
         private GameUiModel Model => host.Model;
         private GatheringSession Session => host.Runtime.Session;
-        private RectTransform safeRoot, body, characterTabs, modalLayer;
+        private RectTransform safeRoot, body, characterTabs, modalLayer, activityHeader;
+        private ActivityHeaderFeedback headerFeedback;
         private ScrollRect scroll;
         private Text heading, notice;
         private CanvasScaler canvasScaler;
@@ -51,9 +52,12 @@ namespace Idlebound.Foundation.Development
             scaler.referenceResolution = new Vector2(480, 854); scaler.matchWidthOrHeight = 0;
             canvasRoot.gameObject.AddComponent<GraphicRaycaster>(); Surface(canvasRoot, Background);
             safeRoot = Column(canvasRoot, "Safe Area", 12); Fill(safeRoot);
-            Size(Label(safeRoot, "IDLEBOUND", 30, Gold), 42);
-            heading = Label(safeRoot, "", 21, Muted, 28);
-            notice = Label(safeRoot, "", 18, Gold, 42);
+            var titleBar = Row(safeRoot,32);
+            Label(titleBar,"IDLEBOUND",22,Gold);
+            heading = Label(titleBar,"",18,Muted);
+            notice = Label(safeRoot, "", 18, Gold, 32);
+            activityHeader = Column(safeRoot,"Persistent activity header",6); Surface(activityHeader,Panel);
+            activityHeader.GetComponent<VerticalLayoutGroup>().spacing = 4;
             characterTabs = Row(safeRoot, 58);
             var scrollRoot = Node("Screen content", safeRoot); Size(scrollRoot, 0, 1);
             scroll = scrollRoot.gameObject.AddComponent<ScrollRect>(); scroll.horizontal = false;
@@ -102,6 +106,8 @@ namespace Idlebound.Foundation.Development
                     grid.gameObject.name == "Skills" ? 92 : grid.gameObject.name == "Bank items" ? 184 : 118);
             if (Time.unscaledTime < nextRefresh) return;
             nextRefresh = Time.unscaledTime + .1f;
+            if (headerFeedback == null || !ReferenceEquals(headerFeedback.Session,Session)) headerFeedback = new ActivityHeaderFeedback(Session);
+            headerFeedback.Observe(Model.InspectedId);
             string next = Structure();
             if (next != signature)
             {
@@ -121,12 +127,14 @@ namespace Idlebound.Foundation.Development
         {
             float position = resetScroll ? 1 : scroll.verticalNormalizedPosition;
             equipmentPanel = equipmentHero = null; equipmentButtons.Clear(); equipmentWidth = -1;
-            Clear(body); Clear(characterTabs); bindings.Clear(); bankBindings.Clear(); grids.Clear(); refreshBank = null;
+            Clear(body); Clear(characterTabs); Clear(activityHeader); bindings.Clear(); bankBindings.Clear(); grids.Clear(); refreshBank = null;
             characterTabs.gameObject.SetActive(Model.CharacterOpen);
-            heading.text = Model.CharacterOpen ? Model.Character(Model.InspectedId).Name + " • " + Model.CharacterTab : Model.Screen == MainScreen.CollectionLog ? "Collection Log" : Model.Screen.ToString();
+            activityHeader.gameObject.SetActive(Model.CharacterOpen);
+            heading.text = Model.CharacterOpen ? Model.CharacterTab.ToString() : Model.Screen == MainScreen.CollectionLog ? "Collection Log" : Model.Screen.ToString();
             foreach (var tab in mainTabs) tab.Value.GetComponent<Image>().color = tab.Key == Model.Screen ? new Color32(96,78,46,255) : Raised;
             if (Model.CharacterOpen)
             {
+                BuildActivityHeader();
                 foreach (CharacterScreen tab in Enum.GetValues(typeof(CharacterScreen)))
                 { var t = tab; Button(characterTabs, tab.ToString(), () => { Model.ShowCharacterTab(t); Rebuild(true); }, Model.CharacterTab == tab, 58); }
                 if (Model.CharacterTab == CharacterScreen.Overview) Overview();
@@ -168,17 +176,37 @@ namespace Idlebound.Foundation.Development
         }
         private static string SkillText(SkillView s) => s.Name + "  Lv " + s.Level + " • " + s.Xp.ToString("0.##") + " XP" +
             (s.NextXp.HasValue ? " • " + (s.NextXp.Value - s.Xp).ToString("0.##") + " to next level" : " • 10M XP cap");
+        private void BuildActivityHeader()
+        {
+            string id = Model.InspectedId;
+            if (headerFeedback == null || !ReferenceEquals(headerFeedback.Session,Session)) headerFeedback = new ActivityHeaderFeedback(Session);
+            headerFeedback.Observe(id);
+            var row = Row(activityHeader,48);
+            var group = row.GetComponent<HorizontalLayoutGroup>(); group.childForceExpandHeight = false; group.childForceExpandWidth = false; group.childAlignment = TextAnchor.MiddleLeft;
+            var identity = Label(row,"",19,Gold,48); Size(identity,48).flexibleWidth = 1;
+            Bind(identity,() => { var c = Model.Character(id); return c.Name + (c.Active ? " • ACTIVE" : " • BACKGROUND") + "\n" + Status(c) + " • HP " + c.Hp + "/" + c.MaxHp; });
+            var toggle = Button(row,Model.SceneCollapsed ? "v" : "^",() => { Model.SceneCollapsed = !Model.SceneCollapsed; Rebuild(false); },false,48);
+            toggle.name = "Activity header toggle"; var size = Size(toggle,48); size.minWidth = size.preferredWidth = 48; size.flexibleWidth = 0;
+            toggle.GetComponent<Image>().color = Panel; toggle.GetComponentInChildren<Text>().color = Muted;
+            Bind(Label(activityHeader,"",18),() =>
+            {
+                var character = Model.Character(id);
+                return (character.SkillId == null ? "" : Session.Skills.First(s => s.Id == character.SkillId).DisplayName + " • ") + character.Assignment +
+                    (Session.Encounters.TryGetValue(id,out var fight) ? " • Enemy HP " + fight.EnemyHp : "");
+            });
+            BindProgress(Progress(activityHeader),() => Model.Character(id).Progress);
+            var latest = Label(activityHeader,"",16,Muted,24); latest.name = "Latest activity feedback";
+            Bind(latest,() => headerFeedback.Latest.Length > 0 ? "Latest: " + headerFeedback.Latest : "No new activity rewards observed");
+            if (!Model.SceneCollapsed)
+            {
+                var stage = Node("Activity scene",activityHeader); Size(stage,180);
+                stage.gameObject.AddComponent<ActivityStage>().Initialize(host,id,adventurerSprite,enemySprite,false);
+            }
+        }
         private void Overview()
         {
             string id = Model.InspectedId;
-            var card = Card(body); Summary(card,id);
-            if (!Session.IsActive(id)) Button(card,"Make Active", () => Act(() => Model.MakeActive()));
-            Button(body,Model.SceneCollapsed ? "Expand activity scene" : "Collapse activity scene", () => { Model.SceneCollapsed = !Model.SceneCollapsed; Rebuild(false); },false,52);
-            if (!Model.SceneCollapsed)
-            {
-                var stage = Node("Activity scene",body); Size(stage,200); stage.gameObject.AddComponent<ActivityStage>().Initialize(host,id,adventurerSprite,enemySprite);
-            }
-            else Bind(Label(body,"",20,Muted,40), () => Model.Character(id).Assignment + " • " + Status(Model.Character(id)));
+            if (!Session.IsActive(id)) Button(body,"Make Active", () => Act(() => Model.MakeActive()));
             var current = Model.Character(id).SkillId;
             if (current != null)
             {
@@ -205,8 +233,7 @@ namespace Idlebound.Foundation.Development
         private void Activities()
         {
             string id = Model.InspectedId;
-            var compact = Card(body); Summary(compact,id);
-            Button(compact,"Stop / cancel current assignment", () => Act(() => Model.Stop()));
+            Button(body,"Stop / cancel current assignment", () => Act(() => Model.Stop()));
             Button(body,"Skill: " + Session.Skills.First(s => s.Id == Model.SkillFilter).DisplayName + " — change", () =>
                 Modal("Choose a skill", content =>
                 {
@@ -261,7 +288,7 @@ namespace Idlebound.Foundation.Development
         }
         private void Equipment()
         {
-            string id = Model.InspectedId; Label(body,"EQUIPMENT • " + Role(id),20,Gold,42);
+            string id = Model.InspectedId;
             var profile = Label(body,"",21); Bind(profile, () => { var p = Session.Profile(id); return p.Style + " • Damage " + p.Damage + " • Defense " + p.Defense + " • " + GameUiModel.Seconds(p.IntervalTicks) + "s / attack"; });
             equipmentPanel = Node("Ten-slot loadout",body); Size(equipmentPanel,EquipmentLayout.Height); Surface(equipmentPanel,Panel);
             equipmentHero = Node("Character",equipmentPanel);

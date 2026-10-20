@@ -60,7 +60,11 @@ namespace Idlebound.Foundation
         public string InspectedId { get; private set; }
         public string SkillFilter { get; private set; } = "mining";
         public bool CharacterOpen { get; private set; }
-        public bool SceneCollapsed { get; set; }
+        private readonly Dictionary<CharacterScreen, bool> sceneCollapsed = new Dictionary<CharacterScreen, bool>
+        {
+            { CharacterScreen.Overview, false }, { CharacterScreen.Equipment, true }, { CharacterScreen.Activities, true }
+        };
+        public bool SceneCollapsed { get => sceneCollapsed[CharacterTab]; set => sceneCollapsed[CharacterTab] = value; }
         public string Search { get; set; } = "";
         public BankFilter Filter { get; set; }
         public string Feedback { get; private set; } = "";

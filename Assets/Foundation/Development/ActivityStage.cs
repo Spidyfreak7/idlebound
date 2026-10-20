@@ -19,7 +19,7 @@ namespace Idlebound.Foundation.Development
         private decimal previousXp;
         private string previousAssignment;
         private float feedbackUntil;
-        public void Initialize(GameSessionHost owner, string id, Sprite heroSprite = null, Sprite targetSprite = null)
+        public void Initialize(GameSessionHost owner, string id, Sprite heroSprite = null, Sprite targetSprite = null, bool showCaptions = true)
         {
             host = owner; characterId = id;
             if (heroSprite != null) adventurerOverride = heroSprite;
@@ -39,6 +39,7 @@ namespace Idlebound.Foundation.Development
             enemy = Actor(r, "Activity target", PixelArtwork.Icon("mining"), .76f); target = enemy.GetComponent<Image>();
             status = MobileUiKit.Label(r, "", 19, MobileUiKit.Muted); Place(status.rectTransform, new Vector2(.5f,.9f), new Vector2(370,32)); status.alignment = TextAnchor.MiddleCenter;
             feedback = MobileUiKit.Label(r, "", 20, MobileUiKit.Gold); Place(feedback.rectTransform, new Vector2(.5f,.17f), new Vector2(370,32)); feedback.alignment = TextAnchor.MiddleCenter;
+            status.gameObject.SetActive(showCaptions); feedback.gameObject.SetActive(showCaptions);
             Capture();
         }
         private static RectTransform Actor(Transform parent, string name, Sprite sprite, float x)

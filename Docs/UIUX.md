@@ -4,9 +4,9 @@ The explicit Stage 8B-05 request supplies the current interaction authority; the
 
 - Bottom navigation: **Roster / Bank / Shop / Collection Log**. Shop is not Town; there is no explorable map.
 - Character navigation: **Overview / Equipment / Activities**. Inspection is independent of active selection. Make Active is immediate and preserves work and gear.
-- Overview alone has the collapsible large activity slice. All nine skills appear in one 3×3 grid and route to their matching Activities filter.
+- Stage 8B-05C supersedes the original Overview-only scene: a pinned shared activity header spans all character tabs, expanded by default on Overview and compact by default on Activities/Equipment. All nine skills appear in one 3×3 grid and route to their matching Activities filter.
 - Activities is a full-height scrolling card view below a compact status/skill picker. Locked cards remain visible. Occupied activities use named-occupant displacement confirmation; no silent swap.
-- Equipment is a full-height ten-slot loadout/browser around a static central character, without the animated work scene. Stat comparisons omit unchanged values. Current enchant/offline effects are absent rather than fabricated.
+- Equipment keeps the static ten-slot loadout/browser, beneath the shared header which defaults compact. The header scene appears only when deliberately expanded. Stat comparisons omit unchanged values. Current enchant/offline effects are absent rather than fabricated.
 - Bank has an item grid, inspection, live quantities, name/ID search, type filters and explicit equipment target. No activity animation. Organization is unsaved UI state; custom tabs/reordering are not delivered.
 - Shop Buy/Sell and boss-specific Collection Log are marked unavailable shells. Collection preview names come from the master design; silhouettes do not imply locked-but-earnable implementation or tracked ownership.
 - Current art is a replaceable original pixel-art prototype. It is not final item appearance, illustrated art, a full character library or completed combat animation. Readability and real actions take priority.
@@ -20,3 +20,7 @@ See `Stage8B05Verification.md` for precise scope, clock/timing policies, known l
 The later explicit approval replaces the crowded Equipment cards with compact square icon slots around a reserved, larger static character. Slot names, equipped status, requirements and comparisons belong in details rather than repeated grid captions. All ten slots and existing atomic actions remain. Bank tiles now show actual catalog names and separate live quantities in a two-column grid; categories remain filters. No items are renamed.
 
 Development combat XP is now 3/3/1.5 per actual damage for Melee/Ranged/Magic, explicitly a **provisional playtest baseline**. The common curve and all other gameplay mechanics are unchanged. See `Stage8B05BVerification.md` for current XP examples, the complete file manifest and exact Unity checks; earlier stage XP examples are historical.
+
+## Stage 8B-05C header revisions
+
+A pinned shared header outside the scroll area shows the inspected character, active/background role, live assignment/progress/HP and recent observed counters/XP. Overview starts expanded; Activities/Equipment start compact, with independent remembered per-tab choices. A small secondary chevron replaces all full-width scene-toggle buttons. Start and equipment actions remain separate. Bank has no activity header, preserving its clean inventory layout. No header interaction executes gameplay, advances time or changes active selection. See `Stage8B05CVerification.md` for defaults, feedback limitations and Windows checks.

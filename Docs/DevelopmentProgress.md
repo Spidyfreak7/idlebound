@@ -50,3 +50,7 @@ Baseline Stage 8B-04 has 330/330 user-verified EditMode passes. Added a separate
 ## Stage 8B-05B
 
 Focused follow-up to user playtesting: compact non-overlapping Equipment icon layout with a larger reserved character area, catalog names/live quantities in Bank, and explicitly approved provisional 3× development combat XP (Melee 3 / Ranged 3 / Magic 1.5 per actual damage). Common XP curve, gathering/production rewards and gameplay implementations remain unchanged. Preserved 359 EditMode and 3 PlayMode cases, updating only seven CSV-dependent existing case expectations. Added 24 EditMode and 2 PlayMode cases for 383/5 authored totals. Static geometry/catalog/preservation/syntax checks and the existing progression model passed; Unity compilation, new tests and rendered UI/device validation remain unrun. See `Stage8B05BVerification.md`; actual Unity pass counts are not claimed.
+
+## Stage 8B-05C
+
+Added a pinned shared character activity header on Overview/Equipment/Activities, independent per-tab expanded/compact defaults, a secondary chevron and live read-only counter/XP feedback. Removed full-width scene toggles and redundant character-page summaries; Bank retains no activity header. Gameplay/catalogs and session ownership are unchanged. Preserved all 383 EditMode cases and 5 PlayMode tests; added 10 and 2 for 393/7 authored totals. Syntax/static checks and the existing progression model passed; Unity compilation, tests and device layout/input verification remain unrun. See `Stage8B05CVerification.md`. Changes remain uncommitted for review.

@@ -254,5 +254,69 @@ namespace Idlebound.Foundation.Tests
             m.Search = second.Id; Assert.That(m.Bank().Single().Name,Is.EqualTo(second.Name));
             Assert.That(m.Session.Inventory,Is.EquivalentTo(before)); Assert.That(m.Session.Assignments[C],Is.EqualTo("mining-1"));
         }
+        [TestCase(CharacterScreen.Overview, false)]
+        [TestCase(CharacterScreen.Equipment, true)]
+        [TestCase(CharacterScreen.Activities, true)]
+        public void ActivityHeaderHasScreenSpecificDefaults(CharacterScreen screen,bool collapsed)
+        {
+            var m = Model(); m.Inspect(C); m.ShowCharacterTab(screen);
+            Assert.That(m.SceneCollapsed,Is.EqualTo(collapsed));
+        }
+        [Test]
+        public void HeaderChoicesAreIndependentAndSurviveNavigationWithoutResettingWork()
+        {
+            var m = Model(); Assign(m); m.Runtime.Tick(owner,2); var session = m.Session;
+            m.ShowCharacterTab(CharacterScreen.Overview); m.SceneCollapsed = true;
+            m.ShowCharacterTab(CharacterScreen.Equipment); Assert.That(m.SceneCollapsed,Is.True); m.SceneCollapsed = false;
+            m.ShowSkill("mining"); Assert.That(m.SceneCollapsed,Is.True,"Activities defaults compact independently of Equipment.");
+            m.Navigate(MainScreen.Bank); m.Inspect(C); Assert.That(m.SceneCollapsed,Is.True,"Overview remembers its user choice.");
+            m.ShowCharacterTab(CharacterScreen.Equipment); Assert.That(m.SceneCollapsed,Is.False);
+            Assert.That(m.Session,Is.SameAs(session)); Assert.That(session.Assignments[C],Is.EqualTo("mining-1"));
+            Assert.That(session.PartialTicks(C),Is.EqualTo(T(2))); Assert.That(session.LastSettledTicks,Is.EqualTo(T(2)));
+        }
+        [TestCase(CharacterScreen.Overview)]
+        [TestCase(CharacterScreen.Equipment)]
+        [TestCase(CharacterScreen.Activities)]
+        public void HeaderTogglingCannotExecuteOrCancelAnActivity(CharacterScreen screen)
+        {
+            var m = Model(); Assign(m); m.Runtime.Tick(owner,2); m.ShowCharacterTab(screen);
+            for (int i = 0; i < 10; i++) m.SceneCollapsed = !m.SceneCollapsed;
+            Assert.That(m.Session.Assignments[C],Is.EqualTo("mining-1")); Assert.That(m.Session.Inventory,Is.Empty);
+            Assert.That(m.Session.PartialTicks(C),Is.EqualTo(T(2))); Assert.That(m.Session.LastSettledTicks,Is.EqualTo(T(2)));
+            Assert.That(m.Session.ActiveCharacterId,Is.EqualTo(C));
+            m.ShowSkill("mining"); Assert.That(m.Start("mining-1"),Is.True);
+            m.Runtime.Tick(owner,5); Assert.That(m.Session.Quantity("metal-1"),Is.EqualTo(1));
+        }
+        [Test]
+        public void HeaderFeedbackReadsRealCycleXpDeltasWithoutGrantingOrReplayingRewards()
+        {
+            var m = Model(); var feedback = new ActivityHeaderFeedback(m.Session); feedback.Observe(C);
+            Assert.That(feedback.Latest,Is.Empty); Assign(m); m.Runtime.Tick(owner,5); feedback.Observe(C);
+            Assert.That(feedback.Latest,Does.Contain("Completed × 1")); Assert.That(feedback.Latest,Does.Contain("+56 Mining XP"));
+            string latest = feedback.Latest; var inventory = m.Session.Inventory.ToArray();
+            for (int i = 0; i < 10; i++) feedback.Observe(C);
+            Assert.That(feedback.Latest,Is.EqualTo(latest)); Assert.That(m.Session.Inventory,Is.EquivalentTo(inventory));
+            Assert.That(m.Session.LastSettledTicks,Is.EqualTo(T(5)));
+            feedback.Observe(D); Assert.That(feedback.Latest,Is.Empty,"Inspecting another character cannot show the first character's rewards.");
+            feedback.Observe(C); Assert.That(feedback.Latest,Is.Empty,"Reopening establishes a baseline, not a replay.");
+        }
+        [Test]
+        public void BackgroundHeaderFeedbackDoesNotFabricateXpOrBankAttribution()
+        {
+            var m = Model(); var feedback = new ActivityHeaderFeedback(m.Session); feedback.Observe(D);
+            m.Inspect(D); m.ShowSkill("mining"); Assert.That(m.Start("mining-1"),Is.True);
+            m.Runtime.Tick(owner,5); feedback.Observe(D);
+            Assert.That(feedback.Latest,Is.EqualTo("Completed × 1")); Assert.That(m.Session.Quantity("metal-1"),Is.EqualTo(1));
+            Assert.That(m.Skills(D).All(s => s.Xp == 0),Is.True);
+        }
+        [Test]
+        public void CombatHeaderFeedbackUsesRealDefeatAndXpCounters()
+        {
+            var m = Model(); m.Inspect(C); Gear(m); m.ShowSkill("melee"); m.Start("dev-chicken");
+            var feedback = new ActivityHeaderFeedback(m.Session); feedback.Observe(C);
+            m.Runtime.Tick(owner,6); feedback.Observe(C);
+            Assert.That(feedback.Latest,Does.Contain("Defeated × 1")); Assert.That(feedback.Latest,Does.Contain("+36 Melee XP"));
+            Assert.That(m.Session.Quantity("dev-feather"),Is.EqualTo(1)); Assert.That(m.Session.Vitals[C].Hp,Is.EqualTo(49));
+        }
     }
 }
