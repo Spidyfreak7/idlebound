@@ -103,6 +103,7 @@ namespace Idlebound.Foundation
                     partialTicks.Remove(pair.Key);
                     // Refunds were preflighted/committed before discarding this reservation.
                     productionJobs.Remove(pair.Key);
+                    encounters.Remove(pair.Key);
                 }
         }
     }

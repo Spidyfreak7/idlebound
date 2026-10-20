@@ -1,0 +1,16 @@
+# ALL stats/weapon requirements are DEVELOPMENT ONLY; standard armor equip level sequence is confirmed.
+# itemId,label,slot,requirements,standardArmorTier,style,damageBonus,defenseBonus,attackSeconds,twoHanded,status
+bronze-dagger-item,[DEV] Bronze dagger stats,Mainhand,melee:1,0,Melee,3,0,2,false,development
+wood-shortbow-item,[DEV] Shortbow stats,Mainhand,ranged:1,0,Ranged,3,0,2,false,development
+wood-wand-item,[DEV] Wand stats,Mainhand,magic:1,0,Magic,3,0,2,false,development
+bronze-helm-item,[DEV] Bronze helm stats,Head,melee:5,1,none,0,1,0,false,development
+dev-practice-hood,[DEV] Nonstandard practice hood,Head,melee:1,0,none,0,1,0,false,development
+dev-practice-body,[DEV] Nonstandard practice body,Body,melee:1,0,none,0,1,0,false,development
+dev-practice-legs,[DEV] Nonstandard practice legs,Legs,melee:1,0,none,0,1,0,false,development
+dev-practice-gloves,[DEV] Practice gloves,Hands,ranged:1,0,none,0,0,0,false,development
+dev-practice-boots,[DEV] Nonstandard practice boots,Feet,melee:1,0,none,0,1,0,false,development
+dev-practice-board,[DEV] Practice offhand,Offhand,melee:1,0,none,0,1,0,false,development
+dev-practice-necklace,[DEV] Practice necklace,Necklace,magic:1,0,none,0,0,0,false,development
+dev-practice-ring,[DEV] Practice ring,Ring,ranged:1,0,none,0,0,0,false,development
+dev-practice-cape,[DEV] Practice cape,Cape,melee:1,0,none,0,0,0,false,development
+dev-greatsword,[DEV] Two-handed test sword,Mainhand,melee:1,0,Melee,5,0,3,true,development

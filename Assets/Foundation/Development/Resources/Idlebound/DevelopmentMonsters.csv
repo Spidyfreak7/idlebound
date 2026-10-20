@@ -1,0 +1,4 @@
+# DEVELOPMENT ONLY. id,label,maxHP,damage,attackSeconds,style,status. No specials.
+dev-chicken,[DEV] Chicken,12,1,3,Melee,development
+dev-goblin,[DEV] Goblin slinger,18,2,3,Ranged,development
+dev-mage,[DEV] Apprentice Mage,24,3,4,Magic,development

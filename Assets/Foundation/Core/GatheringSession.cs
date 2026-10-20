@@ -28,7 +28,8 @@ namespace Idlebound.Foundation
         public XpCurve Curve => curve;
         public bool RefundCancelledInputs { get; }
 
-        public GatheringSession(GatheringCatalog catalog, XpCurve curve, ProductionCatalog production = null, bool? refundCancelledInputs = null)
+        public GatheringSession(GatheringCatalog catalog, XpCurve curve, ProductionCatalog production = null, bool? refundCancelledInputs = null,
+            EquipmentCatalog equipment = null, CombatCatalog combat = null, IDeterministicLootRoller random = null)
         {
             Catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             this.curve = curve ?? throw new ArgumentNullException(nameof(curve));
@@ -42,12 +43,30 @@ namespace Idlebound.Foundation
                 catalog.Resources.Any(r => !Production.ItemNames.TryGetValue(r.Id, out var name) || name != r.DisplayName) ||
                 Production.Recipes.Any(r => catalog.Resources.Any(raw => raw.Id == r.OutputId)))
                 throw new ArgumentException("Production catalog does not match session resource definitions.");
+            Equipment = equipment ?? EquipmentCatalog.Empty;
+            Combat = combat ?? CombatCatalog.Empty;
+            lootRoller = random ?? new SeededLootRoller(804);
+            if (Production.Recipes.Any(recipe => recipe.Inputs.Keys.Any(id => Equipment.Definitions.Any(d => d.Id == id))))
+                throw new ArgumentException("Equipment-item recipe inputs need future instance-aware reservations; not supported yet.");
+            var names = new Dictionary<string, string>(Production.ItemNames);
+            foreach (var gear in Equipment.Definitions) if (!names.ContainsKey(gear.Id)) names.Add(gear.Id, gear.Name);
+            foreach (var drop in Combat.Drops) if (!names.ContainsKey(drop.ItemId)) names.Add(drop.ItemId, drop.ItemName);
+            BankItems = new ReadOnlyDictionary<string, string>(names);
             ProductionJobs = new ReadOnlyDictionary<string, ProductionRecipe>(productionJobs);
             state = new GameState(new RosterAccess(), SkillCatalog.Create(),
-                catalog.Activities.Concat(Production.Recipes.Select(r => r.Activity())));
+                catalog.Activities.Concat(Production.Recipes.Select(r => r.Activity())).Concat(Combat.Monsters.Select(m => m.Activity())));
             for (int i = 1; i <= RosterAccess.InitialAvailableSlots; i++)
                 state.TryAddCharacter(new CharacterState("character-" + i, "Character " + i,
                     state.Skills.Select(s => new SkillState(s.Id, 1, 0))));
+            foreach (var character in Characters)
+            {
+                loadouts.Add(character.Id, new CharacterEquipment());
+                vitals.Add(character.Id, new CharacterVitals(Combat.Rules.PlayerMaxHp, Combat.Rules.PlayerMaxHp));
+            }
+            Loadouts = new ReadOnlyDictionary<string, CharacterEquipment>(loadouts);
+            BankEquipmentInstances = new ReadOnlyDictionary<string, EquipmentInstance>(bankInstances);
+            Vitals = new ReadOnlyDictionary<string, CharacterVitals>(vitals);
+            Encounters = new ReadOnlyDictionary<string, CombatEncounter>(encounters);
             Inventory = new ReadOnlyDictionary<string, long>(inventory);
         }
 
@@ -86,6 +105,7 @@ namespace Idlebound.Foundation
             // Preflight all rewards before mutating anything; checked overflow cannot partly pay a batch.
             foreach (var assignment in Assignments.OrderBy(a => a.Key, StringComparer.Ordinal))
             {
+                if (Combat.Monsters.Any(m => m.Id == assignment.Value)) continue;
                 var activity = Activities.First(a => a.Id == assignment.Value);
                 var recipe = Production.Recipes.FirstOrDefault(r => r.Id == assignment.Value);
                 if (recipe != null && !productionJobs.ContainsKey(assignment.Key)) continue;
@@ -108,6 +128,7 @@ namespace Idlebound.Foundation
                 plans.Add(new Settlement { CharacterId = assignment.Key, Skill = skill,
                     Remaining = remainder, TotalCycles = totalCycles, Xp = xp, FinishedProduction = recipe != null && cycles == 1 });
             }
+            var combatBatch = PlanCombat(eligible, offline, nextInventory);
             inventory.Clear();
             foreach (var pair in nextInventory) inventory.Add(pair.Key, pair.Value);
             foreach (var plan in plans)
@@ -117,6 +138,7 @@ namespace Idlebound.Foundation
                 plan.Skill.Award(plan.Xp, curve);
                 if (plan.FinishedProduction) productionJobs.Remove(plan.CharacterId);
             }
+            CommitCombat(combatBatch);
             // Advance across ineligible offline excess too, so a repeated call cannot reclaim it.
             LastSettledTicks = absoluteTicks;
         }
@@ -130,6 +152,8 @@ namespace Idlebound.Foundation
         public bool AssignAt(long ticks, string characterId, string activityId, bool swap, out string error)
         {
             SettleTo(ticks);
+            if (Combat.Monsters.Any(m => m.Id == activityId))
+            { error = "Use StartCombatAt so encounter state is initialized."; return false; }
             if (Production.Recipes.Any(r => r.Id == activityId))
             { error = "Use StartProductionAt so ingredients are consumed."; return false; }
             if (!TryPlanChange(characterId, activityId, swap, out var cancelled, out error)) return false;
@@ -155,6 +179,7 @@ namespace Idlebound.Foundation
                 ReplaceInventory(refundedInventory);
                 partialTicks.Remove(characterId);
                 productionJobs.Remove(characterId);
+                encounters.Remove(characterId);
             }
             return removed;
         }

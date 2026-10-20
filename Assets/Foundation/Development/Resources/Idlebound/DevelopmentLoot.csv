@@ -1,0 +1,7 @@
+# DEVELOPMENT ONLY. dropId,monsterId,itemId,itemLabel,quantity,independentChance
+chicken-feather,dev-chicken,dev-feather,[DEV] Feather,1,1
+chicken-egg,dev-chicken,dev-egg,[DEV] Egg,1,0.25
+goblin-metal,dev-goblin,metal-1,Bronze,1,1
+goblin-dagger,dev-goblin,bronze-dagger-item,Bronze dagger,1,0.1
+mage-cloth,dev-mage,cloth-1,Linen,1,1
+mage-wand,dev-mage,wood-wand-item,Common wood wand,1,0.1

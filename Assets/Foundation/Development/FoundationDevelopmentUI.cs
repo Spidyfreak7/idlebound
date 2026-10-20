@@ -12,6 +12,7 @@ namespace Idlebound.Foundation.Development
         private string inspected = "character-1";
         private string skillFilter = "mining";
         private string message = "Gathering ready. Production XP/action is unresolved; XP stays zero by default.";
+        private string gearData, combatRulesData, monstersData, lootData;
         private string tierData;
         private string xpData;
         private string productionData;
@@ -28,18 +29,23 @@ namespace Idlebound.Foundation.Development
 
         private void Awake()
         {
+            var gear = Resources.Load<TextAsset>("Idlebound/DevelopmentGear");
+            var rules = Resources.Load<TextAsset>("Idlebound/DevelopmentCombatRules");
+            var monsters = Resources.Load<TextAsset>("Idlebound/DevelopmentMonsters");
+            var loot = Resources.Load<TextAsset>("Idlebound/DevelopmentLoot");
             var tiers = Resources.Load<TextAsset>("Idlebound/ResourceTiers");
             var xp = Resources.Load<TextAsset>("Idlebound/KnownXpMilestones");
             var recipes = Resources.Load<TextAsset>("Idlebound/StarterProductionRecipes");
             var samples = Resources.Load<TextAsset>("Idlebound/DevelopmentProductionRecipes");
             var rewards = Resources.Load<TextAsset>("Idlebound/GatheringXp");
             var fullCurve = Resources.Load<TextAsset>("Idlebound/ProductionXpCurve");
-            if (tiers == null || xp == null || recipes == null || samples == null || rewards == null || fullCurve == null)
+            if (gear == null || rules == null || monsters == null || loot == null || tiers == null || xp == null || recipes == null || samples == null || rewards == null || fullCurve == null)
             {
-                Debug.LogError("Idlebound gathering data missing; development harness disabled.");
+                Debug.LogError("Idlebound foundation catalog missing; development harness disabled.");
                 enabled = false;
                 return;
             }
+            gearData = gear.text; combatRulesData = rules.text; monstersData = monsters.text; lootData = loot.text;
             tierData = tiers.text;
             xpData = xp.text;
             productionData = recipes.text;
@@ -54,7 +60,9 @@ namespace Idlebound.Foundation.Development
             var catalog = fixture ? GatheringCatalog.Load(tierData, true) : GatheringCatalog.LoadProduction(tierData, gatheringXpData);
             var production = ProductionCatalog.Load(productionData + "\n" +
                 (developmentRecipes ? developmentProductionData : ""), catalog.Resources, developmentRecipes);
-            session = new GatheringSession(catalog, XpCurve.Load(fixture ? xpData : fullXpData, fixture), production, refundCancelledInputs: true);
+            session = new GatheringSession(catalog, XpCurve.Load(fixture ? xpData : fullXpData, fixture), production, refundCancelledInputs: true,
+                equipment: EquipmentCatalog.LoadDevelopment(gearData),
+                combat: CombatCatalog.LoadDevelopment(combatRulesData, monstersData, lootData));
             inspected = "character-1";
             fractionalTicks = 0;
             previousTime = Time.realtimeSinceStartupAsDouble;
@@ -114,7 +122,7 @@ namespace Idlebound.Foundation.Development
             {
                 GUILayout.BeginArea(new Rect(16, 12, 688, safe.height / scale - 24));
                 scroll = GUILayout.BeginScrollView(scroll);
-                GUILayout.Label("IDLEBOUND — Stage 8B-03B", title);
+                GUILayout.Label("IDLEBOUND — Stage 8B-04", title);
                 GUILayout.Label("In-memory development state • no save/cloud", label);
                 GUILayout.Label(session.UsesDevelopmentXp
                     ? "DEVELOPMENT XP FIXTURE: 100000/cycle. Level is a known milestone floor only."
@@ -156,6 +164,10 @@ namespace Idlebound.Foundation.Development
                         "/" + (activity.DurationTicks / (double)TimeSpan.TicksPerSecond).ToString("0.0") + "s";
                     if (activity != null && session.Production.Recipes.Any(r => r.Id == activity.Id) &&
                         !session.ProductionJobs.ContainsKey(character.Id)) status = activity.DisplayName + " • Ready for next Start";
+                    if (session.Encounters.TryGetValue(character.Id, out var encounter))
+                        status = "Fighting " + encounter.MonsterId + " • enemy HP " + encounter.EnemyHp +
+                            " • next hit " + (encounter.PlayerRemainingTicks / (double)TimeSpan.TicksPerSecond).ToString("0.0") + "s";
+                    status += " • HP " + session.Vitals[character.Id].Hp + "/" + session.Vitals[character.Id].MaxHp;
                     if (GUILayout.Button(character.DisplayName + (session.IsActive(character.Id) ? " [ACTIVE]" : " [background]") +
                         "\n" + status, button, GUILayout.MinHeight(86))) inspected = character.Id;
                 }
@@ -245,12 +257,72 @@ namespace Idlebound.Foundation.Development
                     }
                     GUI.enabled = previousEnabled;
                 }
+                GUILayout.Label("EQUIPMENT / COMBAT — DEVELOPMENT ONLY", title);
+                GUILayout.Label("All gear stats, enemies, loot odds, HP, damage and XP coefficients are test data, not final balance. Style follows mainhand; unarmed = Melee. No passive healing.", label);
+                var profile = session.Profile(inspected);
+                GUILayout.Label("Style " + profile.Style + " • damage " + profile.Damage + " • defense " + profile.Defense +
+                    " • interval " + (profile.IntervalTicks / (double)TimeSpan.TicksPerSecond) + "s • HP " + session.Vitals[inspected].Hp + "/" + session.Vitals[inspected].MaxHp, label);
+                foreach (EquipmentSlot slot in Enum.GetValues(typeof(EquipmentSlot)))
+                {
+                    bool occupied = session.Loadouts[inspected].Slots.TryGetValue(slot, out var equipped);
+                    GUILayout.Label(slot + ": " + (occupied ? equipped.Definition.Name + " [" + equipped.InstanceId + "]" : "Empty"), label);
+                    if (occupied && GUILayout.Button("Unequip " + slot, button))
+                    {
+                        session.UnequipAt(session.LastSettledTicks, inspected, slot, out var error);
+                        message = error ?? "Returned item to shared bank.";
+                        GUIUtility.ExitGUI();
+                    }
+                }
+                foreach (var gear in session.Equipment.Definitions)
+                {
+                    GUILayout.Label(gear.Name + " • " + gear.Slot + " • requires " +
+                        string.Join(" / ", gear.Requirements.Select(r => r.Key + " " + r.Value)) +
+                        " • bank " + session.Quantity(gear.Id) + " • damage +" + gear.DamageBonus + " • defense +" + gear.DefenseBonus, label);
+                    if (GUILayout.Button("Equip / choose style: " + (gear.Style?.ToString() ?? gear.Slot.ToString()), button))
+                    {
+                        session.EquipAt(session.LastSettledTicks, inspected, gear.Id, gear.Slot, out var error);
+                        message = error ?? "Equipped " + gear.Name;
+                        GUIUtility.ExitGUI();
+                    }
+                }
+                if (GUILayout.Button("DEV ONLY: add one sample gear kit to bank", button))
+                {
+                    session.GrantDevelopmentGearKitAt(session.LastSettledTicks);
+                    message = "Explicit testing grant only; not a production reward.";
+                    GUIUtility.ExitGUI();
+                }
+                foreach (var monster in session.Combat.Monsters)
+                {
+                    GUILayout.Label(monster.Name + " • " + monster.Style + " • HP " + monster.MaxHp + " • damage " + monster.Damage +
+                        " • kills by this character " + session.KillsFor(inspected, monster.Id), label);
+                    foreach (var drop in session.Combat.Drops.Where(d => d.MonsterId == monster.Id))
+                        GUILayout.Label("[DEV loot] " + drop.ItemName + " × " + drop.Quantity + " @ " + drop.Chance.ToString("P0"), label);
+                    bool occupied = session.Assignments.Any(a => a.Key != inspected && a.Value == monster.Id);
+                    if (GUILayout.Button((occupied ? "Swap assignment and fight " : "Fight ") + monster.Name + " as " + profile.Style, button))
+                    {
+                        session.StartCombatAt(session.LastSettledTicks, inspected, monster.Id, profile.Style, occupied, out var error);
+                        message = error ?? "Combat started. Normal monsters repeat; death stops combat.";
+                        GUIUtility.ExitGUI();
+                    }
+                }
+                if (GUILayout.Button("Stop combat / unassign", button))
+                {
+                    session.UnassignAt(session.LastSettledTicks, inspected);
+                    message = "Stopped. Enemy progress discarded; character HP retained.";
+                    GUIUtility.ExitGUI();
+                }
+                if (GUILayout.Button("DEV ONLY: restore HP after stopping combat", button))
+                {
+                    session.RestoreDevelopmentHpAt(session.LastSettledTicks, inspected, out var error);
+                    message = error ?? "Explicit test HP reset. No automatic recovery policy.";
+                    GUIUtility.ExitGUI();
+                }
                 GUILayout.Label("SHARED BANK — MATERIALS AND FINISHED PRODUCTS", title);
-                foreach (var item in session.Production.ItemNames)
+                foreach (var item in session.BankItems)
                     if (session.Quantity(item.Key) > 0)
                         GUILayout.Label(item.Value + " × " + session.Quantity(item.Key), label);
                 if (session.Inventory.Count == 0) GUILayout.Label("Empty — complete a gathering cycle.", label);
-                GUILayout.Label("No background bonuses equipped. Offline uses background XP for everyone. No gem rolls, equipment stats or equipping.", label);
+                GUILayout.Label("No background bonuses equipped. Offline uses background XP for everyone. Combat gear does not grant background XP bonuses. No persistence or gem rolls.", label);
                 GUILayout.EndScrollView();
                 GUILayout.EndArea();
             }
