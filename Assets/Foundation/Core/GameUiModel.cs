@@ -68,17 +68,55 @@ namespace Idlebound.Foundation
         public string Search { get; set; } = "";
         public BankFilter Filter { get; set; }
         public string Feedback { get; private set; } = "";
+        private sealed class BankReturnContext
+        {
+            internal string CharacterId, SkillId;
+            internal CharacterScreen Tab;
+            internal bool Collapsed;
+            internal float Scroll;
+        }
+        private BankReturnContext bankReturn;
+        public bool CanReturnToCharacter => Screen == MainScreen.Bank && bankReturn != null && Session.Characters.Any(c => c.Id == bankReturn.CharacterId);
+        public float CharacterScrollPosition { get; private set; } = 1;
         public GameUiModel(SessionRuntime runtime)
         { Runtime = runtime ?? throw new ArgumentNullException(nameof(runtime)); InspectedId = Session.Characters[0].Id; }
-        public void Navigate(MainScreen screen)
+        public void Navigate(MainScreen screen, float characterScrollPosition = 1)
         {
             if (!Enum.IsDefined(typeof(MainScreen), screen)) throw new ArgumentException("Unknown screen.");
+            if (Screen == MainScreen.Bank && screen == MainScreen.Roster) { ReturnFromBank(); return; }
+            if (screen == MainScreen.Bank && Screen != MainScreen.Bank)
+            {
+                bankReturn = CharacterOpen ? new BankReturnContext
+                {
+                    CharacterId = InspectedId, Tab = CharacterTab, SkillId = SkillFilter, Collapsed = SceneCollapsed,
+                    Scroll = float.IsNaN(characterScrollPosition) || float.IsInfinity(characterScrollPosition) ? 1 : Math.Max(0,Math.Min(1,characterScrollPosition))
+                } : null;
+            }
+            else if (screen != MainScreen.Bank) bankReturn = null;
             Screen = screen; CharacterOpen = false;
+        }
+        public bool ReturnFromBank()
+        {
+            if (Screen != MainScreen.Bank) return false;
+            bool valid = CanReturnToCharacter;
+            var context = bankReturn; bankReturn = null;
+            Screen = MainScreen.Roster; CharacterOpen = valid;
+            if (!valid) { CharacterScrollPosition = 1; return false; }
+            InspectedId = context.CharacterId; CharacterTab = context.Tab; SkillFilter = context.SkillId;
+            SceneCollapsed = context.Collapsed; CharacterScrollPosition = context.Scroll;
+            return true;
+        }
+        // Choosing a Bank equip target must not overwrite the originating character screen.
+        public void SetBankEquipmentTarget(string id)
+        {
+            if (Screen != MainScreen.Bank) throw new InvalidOperationException("Choose a Bank equipment target while viewing Bank.");
+            if (!Session.Characters.Any(c => c.Id == id)) throw new ArgumentException("Unknown character.");
+            InspectedId = id;
         }
         public void Inspect(string id)
         {
             if (!Session.Characters.Any(c => c.Id == id)) throw new ArgumentException("Unknown character.");
-            InspectedId = id; CharacterOpen = true; Screen = MainScreen.Roster; CharacterTab = CharacterScreen.Overview;
+            bankReturn = null; InspectedId = id; CharacterOpen = true; Screen = MainScreen.Roster; CharacterTab = CharacterScreen.Overview;
         }
         public void ShowCharacterTab(CharacterScreen tab)
         {

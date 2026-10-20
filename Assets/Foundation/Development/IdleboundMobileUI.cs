@@ -69,7 +69,7 @@ namespace Idlebound.Foundation.Development
             foreach (MainScreen screen in Enum.GetValues(typeof(MainScreen)))
             {
                 var tab = screen;
-                var b = Button(nav, screen == MainScreen.CollectionLog ? "Collection\nLog" : screen.ToString(), () => { Model.Navigate(tab); Rebuild(true); });
+                var b = Button(nav, screen == MainScreen.CollectionLog ? "Collection\nLog" : screen.ToString(), () => NavigateMain(tab));
                 b.GetComponentInChildren<Text>().fontSize = 19; mainTabs.Add(screen,b);
             }
             modalLayer = Node("Modal layer", canvasRoot); Fill(modalLayer); modalLayer.gameObject.SetActive(false);
@@ -79,6 +79,19 @@ namespace Idlebound.Foundation.Development
                 events.transform.SetParent(transform, false); events.GetComponent<InputSystemUIInputModule>().AssignDefaultActions();
             }
             ApplySafeArea();
+        }
+        private void NavigateMain(MainScreen screen)
+        {
+            bool returning = Model.Screen == MainScreen.Bank && screen == MainScreen.Roster;
+            Model.Navigate(screen,scroll.verticalNormalizedPosition);
+            CloseModal(); scroll.StopMovement(); Rebuild(true);
+            if (returning && Model.CharacterOpen) scroll.verticalNormalizedPosition = Model.CharacterScrollPosition;
+        }
+        private void BackToCharacter()
+        {
+            bool restored = Model.ReturnFromBank();
+            CloseModal(); scroll.StopMovement(); Rebuild(true);
+            if (restored) scroll.verticalNormalizedPosition = Model.CharacterScrollPosition;
         }
         private void ApplySafeArea()
         {
@@ -364,11 +377,17 @@ namespace Idlebound.Foundation.Development
         }
         private void Bank()
         {
+            if (Model.CanReturnToCharacter)
+            {
+                var backRow = Row(body,48); backRow.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;
+                var back = Button(backRow,"Back to Character",BackToCharacter,false,48);
+                var size = Size(back,48); size.minWidth = size.preferredWidth = 210; size.flexibleWidth = 0;
+            }
             Label(body,"SHARED BANK",22,Gold,36);
             Button(body,"Equipment target: " + Model.Character(Model.InspectedId).Name + " — change", () => Modal("Choose equipment target", content =>
             {
                 foreach (var c in Session.Characters)
-                { string id = c.Id; Button(content,c.DisplayName,() => { Model.Inspect(id); Model.Navigate(MainScreen.Bank); CloseModal(); Rebuild(false); }); }
+                { string id = c.Id; Button(content,c.DisplayName,() => { Model.SetBankEquipmentTarget(id); CloseModal(); Rebuild(false); }); }
             }));
             var search = SearchBox(body,Model.Search);
             var filters = Row(body,56);

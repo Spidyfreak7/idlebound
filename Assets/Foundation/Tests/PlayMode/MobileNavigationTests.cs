@@ -176,5 +176,40 @@ namespace Idlebound.Foundation.Tests
             root.GetComponentsInChildren<Button>().Single(b => b.name == "Activity header toggle").onClick.Invoke(); yield return null;
             Assert.That(host.Runtime.Session,Is.SameAs(session)); Assert.That(session.Quantity("bronze-dagger-item"),Is.EqualTo(1));
         }
+        [UnityTest]
+        public IEnumerator BankBackAndBottomRosterRestoreEachCharacterTabAndActivityScroll()
+        {
+            var host = GameSessionHost.Instance;
+            host.Runtime.SetPresence(host,Time.realtimeSinceStartupAsDouble,false,true); host.SetRunning(false);
+            var session = host.Runtime.Session;
+            Button("Inspect Character 1").onClick.Invoke(); yield return null;
+            foreach (var tab in new[] { CharacterScreen.Overview,CharacterScreen.Equipment,CharacterScreen.Activities })
+            {
+                Button(tab.ToString()).onClick.Invoke(); yield return null;
+                var page = root.GetComponentsInChildren<ScrollRect>().Single(s => s.gameObject.name == "Screen content");
+                Canvas.ForceUpdateCanvases(); page.verticalNormalizedPosition = .35f;
+                float position = page.verticalNormalizedPosition;
+                bool scrollable = page.content.rect.height > page.viewport.rect.height + 1;
+                Button("Bank").onClick.Invoke(); yield return null;
+                Assert.That(host.Model.CharacterOpen,Is.False); Assert.That(host.Model.CanReturnToCharacter,Is.True);
+                Button("Back to Character").onClick.Invoke(); yield return null;
+                Assert.That(host.Model.CharacterOpen,Is.True); Assert.That(host.Model.CharacterTab,Is.EqualTo(tab));
+                Assert.That(host.Model.InspectedId,Is.EqualTo("character-1"));
+                if (scrollable) Assert.That(page.verticalNormalizedPosition,Is.EqualTo(position).Within(.03));
+                Button("Bank").onClick.Invoke(); yield return null;
+                Button("Roster").onClick.Invoke(); yield return null;
+                Assert.That(host.Model.CharacterOpen,Is.True); Assert.That(host.Model.CharacterTab,Is.EqualTo(tab));
+            }
+            Assert.That(host.Runtime.Session,Is.SameAs(session)); Assert.That(session.Assignments,Is.Empty); Assert.That(session.Inventory,Is.Empty);
+        }
+        [UnityTest]
+        public IEnumerator DashboardBankHasNoCharacterBackAndReturnsToRosterDashboard()
+        {
+            Button("Bank").onClick.Invoke(); yield return null;
+            Assert.That(root.GetComponentsInChildren<Text>().Any(t => t.text == "Back to Character"),Is.False);
+            Button("Roster").onClick.Invoke(); yield return null;
+            Assert.That(GameSessionHost.Instance.Model.CharacterOpen,Is.False);
+            Assert.That(root.GetComponentsInChildren<Text>().Any(t => t.text == "YOUR ACTIVE ADVENTURER"),Is.True);
+        }
     }
 }

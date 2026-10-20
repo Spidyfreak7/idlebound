@@ -318,5 +318,80 @@ namespace Idlebound.Foundation.Tests
             Assert.That(feedback.Latest,Does.Contain("Defeated × 1")); Assert.That(feedback.Latest,Does.Contain("+36 Melee XP"));
             Assert.That(m.Session.Quantity("dev-feather"),Is.EqualTo(1)); Assert.That(m.Session.Vitals[C].Hp,Is.EqualTo(49));
         }
+        [TestCase(CharacterScreen.Overview, false)]
+        [TestCase(CharacterScreen.Overview, true)]
+        [TestCase(CharacterScreen.Equipment, false)]
+        [TestCase(CharacterScreen.Equipment, true)]
+        [TestCase(CharacterScreen.Activities, false)]
+        [TestCase(CharacterScreen.Activities, true)]
+        public void BankReturnsToExactCharacterContextWithoutSettlingTime(CharacterScreen tab,bool bottomRoster)
+        {
+            var m = Model(); Assign(m); m.Runtime.Tick(owner,2); m.Inspect(D); m.ShowSkill("fishing"); m.ShowCharacterTab(tab);
+            m.SceneCollapsed = !m.SceneCollapsed; bool collapsed = m.SceneCollapsed; var session = m.Session;
+            m.Navigate(MainScreen.Bank,.37f);
+            Assert.That(m.CanReturnToCharacter,Is.True); Assert.That(m.CharacterOpen,Is.False);
+            m.Navigate(MainScreen.Bank); Assert.That(m.CanReturnToCharacter,Is.True,"Reselecting Bank must not lose its origin.");
+            if (bottomRoster) m.Navigate(MainScreen.Roster); else Assert.That(m.ReturnFromBank(),Is.True);
+            Assert.That(m.Screen,Is.EqualTo(MainScreen.Roster)); Assert.That(m.CharacterOpen,Is.True);
+            Assert.That(m.InspectedId,Is.EqualTo(D)); Assert.That(m.CharacterTab,Is.EqualTo(tab)); Assert.That(m.SkillFilter,Is.EqualTo("fishing"));
+            Assert.That(m.SceneCollapsed,Is.EqualTo(collapsed)); Assert.That(m.CharacterScrollPosition,Is.EqualTo(.37f));
+            Assert.That(m.Session,Is.SameAs(session)); Assert.That(session.ActiveCharacterId,Is.EqualTo(C));
+            Assert.That(session.Assignments[C],Is.EqualTo("mining-1")); Assert.That(session.PartialTicks(C),Is.EqualTo(T(2)));
+            Assert.That(session.LastSettledTicks,Is.EqualTo(T(2))); Assert.That(session.Inventory,Is.Empty);
+        }
+        [TestCase(false)]
+        [TestCase(true)]
+        public void DashboardBankReturnsToDashboardEvenWhenEquipmentTargetChanges(bool bottomRoster)
+        {
+            var m = Model(); m.Navigate(MainScreen.Roster); m.Navigate(MainScreen.Bank); m.SetBankEquipmentTarget(D);
+            Assert.That(m.CanReturnToCharacter,Is.False);
+            if (bottomRoster) m.Navigate(MainScreen.Roster); else Assert.That(m.ReturnFromBank(),Is.False);
+            Assert.That(m.Screen,Is.EqualTo(MainScreen.Roster)); Assert.That(m.CharacterOpen,Is.False);
+            Assert.That(m.Session.ActiveCharacterId,Is.EqualTo(C)); Assert.That(m.Session.LastSettledTicks,Is.Zero);
+        }
+        [Test]
+        public void BankEquipmentTargetDoesNotOverwriteTheOriginatingCharacterScreen()
+        {
+            var m = Model(); m.Inspect(C); m.ShowSkill("smithing"); m.ShowCharacterTab(CharacterScreen.Equipment);
+            m.Session.GrantDevelopmentGearKitAt(0);
+            m.Navigate(MainScreen.Bank,.4f); m.SetBankEquipmentTarget(D);
+            Assert.That(m.Equip("bronze-dagger-item"),Is.True);
+            Assert.That(m.Session.Loadouts[D].Slots[EquipmentSlot.Mainhand].Definition.Id,Is.EqualTo("bronze-dagger-item"));
+            Assert.That(m.Session.Loadouts[C].Slots,Is.Empty); Assert.That(m.Session.Quantity("bronze-dagger-item"),Is.Zero);
+            Assert.That(m.InspectedId,Is.EqualTo(D)); Assert.That(m.CanReturnToCharacter,Is.True);
+            Assert.That(m.ReturnFromBank(),Is.True); Assert.That(m.InspectedId,Is.EqualTo(C));
+            Assert.That(m.CharacterTab,Is.EqualTo(CharacterScreen.Equipment)); Assert.That(m.SkillFilter,Is.EqualTo("smithing"));
+        }
+        [Test]
+        public void IntentionalInspectionReplacesAnEarlierBankReturnContext()
+        {
+            var m = Model(); m.Inspect(C); m.ShowCharacterTab(CharacterScreen.Equipment); m.Navigate(MainScreen.Bank);
+            m.Inspect(D); m.ShowSkill("fishing"); m.Navigate(MainScreen.Bank,.2f); m.Navigate(MainScreen.Roster);
+            Assert.That(m.InspectedId,Is.EqualTo(D)); Assert.That(m.CharacterTab,Is.EqualTo(CharacterScreen.Activities));
+            Assert.That(m.SkillFilter,Is.EqualTo("fishing")); Assert.That(m.Session.ActiveCharacterId,Is.EqualTo(C));
+            m.Navigate(MainScreen.Roster); Assert.That(m.CharacterOpen,Is.False,"A second Roster tap intentionally opens the dashboard.");
+        }
+        [Test]
+        public void InvalidCharacterRequestsCannotPoisonTheBankReturnContext()
+        {
+            var m = Model(); m.Inspect(D); m.ShowCharacterTab(CharacterScreen.Equipment); m.Navigate(MainScreen.Bank);
+            Assert.Throws<ArgumentException>(() => m.Inspect("missing"));
+            Assert.Throws<ArgumentException>(() => m.SetBankEquipmentTarget("missing"));
+            Assert.That(m.ReturnFromBank(),Is.True);
+            Assert.That(m.Session.Characters.Any(c => c.Id == m.InspectedId),Is.True); Assert.That(m.InspectedId,Is.EqualTo(D));
+        }
+        [TestCase(-.2f, 0f)]
+        [TestCase(1.2f, 1f)]
+        public void SavedCharacterScrollClampsElasticOverscroll(float scroll,float expected)
+        {
+            var m = Model(); m.Inspect(C); m.Navigate(MainScreen.Bank,scroll); m.ReturnFromBank();
+            Assert.That(m.CharacterScrollPosition,Is.EqualTo(expected));
+        }
+        [Test]
+        public void NavigatingElsewhereFromBankDoesNotLeaveAStaleCharacterReturn()
+        {
+            var m = Model(); m.Inspect(C); m.Navigate(MainScreen.Bank); m.Navigate(MainScreen.Shop); m.Navigate(MainScreen.Roster);
+            Assert.That(m.CharacterOpen,Is.False); m.Navigate(MainScreen.Bank); Assert.That(m.CanReturnToCharacter,Is.False);
+        }
     }
 }

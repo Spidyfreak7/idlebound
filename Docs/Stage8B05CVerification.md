@@ -2,6 +2,8 @@
 
 Baseline: `768a9bad552ca353730781f84c1465088e993f64`. Unity 6000.3.26f1. This is presentation/interaction polish; gameplay formulas, catalog values, assignments, equipment operations, Bank logic, production logic and the session/clock owner are unchanged.
 
+Current navigation-follow-up totals: **407 authored EditMode cases and 9 authored PlayMode tests**, all Unity execution still pending. The original header-only counts below are historical; see the additional navigation section for current checks.
+
 ## Delivered behavior
 
 A shared activity header is pinned **above the character tabs, outside the scrolling page**, on Overview, Equipment and Activities. It follows the **inspected character**, labels ACTIVE/BACKGROUND explicitly and never selects them automatically. It shows their name, working/idle/attention and HP state, actual skill/assignment, enemy HP during combat, action progress and recent observed completion/defeat/XP deltas.
@@ -30,7 +32,7 @@ Authored totals: **393 EditMode cases and 7 PlayMode tests** (subject to Unity d
 - Asset metadata/GUIDs, assembly JSON, new authored-case counts, removed full-width toggle strings and pinned hierarchy/toggle callback boundaries checked.
 - `git diff --check`: passed.
 
-No Unity Editor or C# compiler is available in this cloud environment. Windows Unity verification is required. Changes are left uncommitted for review.
+No Unity Editor or C# compiler is available in this cloud environment. Windows Unity verification is required. Work is published on `stage-8b-05c-review` for review; main is not merged.
 
 ## Windows Unity verification
 
@@ -62,3 +64,23 @@ Docs/DevelopmentProgress.md
 Docs/Stage8B05CVerification.md
 Docs/UIUX.md
 ```
+
+## Additional requirement — Character / Bank navigation
+
+Bank opened from character management now saves the originating character, exact tab, selected skill, current header expansion choice and normalized page scroll position. The existing expanded-card state remains in the presentation rather than being rebuilt as new gameplay state. A compact **Back to Character** button restores that context. The bottom **Roster** button from Bank invokes the same return behavior. Re-selecting Bank does not overwrite its origin. Bank opened from the Roster dashboard has no character-return button and returns to the dashboard.
+
+The Bank remains one account-wide inventory. Its equipment-target chooser changes only the equip target while Bank is open; it does not overwrite the original return screen. Returning restores the original inspected character, while any completed equip operation stays with its chosen target. An explicit inspection of a different character starts a new context, so later Bank returns follow that character. Invalid character requests are rejected, and the stored origin is checked against the current roster before restoration. Missing/stale origins fall back to the Roster dashboard. After returning to a character, a further Roster tap opens the dashboard for intentional character switching. Visiting Shop/Collection Log instead of returning clears the one-level Bank origin.
+
+Scroll restoration is best-effort normalized positioning, not a persisted pixel/item anchor: completed jobs, changed card heights, content that no longer scrolls and resizing can change the visible row. Scroll inertia is stopped when navigating; no simulation time is settled. Search/filter state remains account-wide UI state. Open transient detail modals are closed rather than restored.
+
+Added 14 EditMode cases and 2 PlayMode tests covering all three character-tab return paths through both controls, Roster→Bank→Roster, preserved skill/header/scroll state, independent equip targets, invalid requests, intentional character switching, stale-context clearing and unchanged work/clock/session. Authored stage totals are now **407 EditMode cases and 9 PlayMode tests**, subject to Unity discovery. All earlier methods remain unchanged. Unity compilation and tests are still not run in this cloud.
+
+Additional Windows checks:
+
+1. In `IdleboundPlay.unity`, inspect Character2, choose Fishing in Activities, expand a card and scroll partway down. Note whether the header is compact. Open Bank, then use Back to Character: Character2/Fishing/Activities and the prior header/card state should return, with approximately the same scroll position. Repeat using bottom Roster instead.
+2. Repeat Overview→Bank→Overview and Equipment→Bank→Equipment. Navigation must not select an active character, stop/restart assignments, reserve/refund inputs, pay rewards or reset progress. Normal gameplay continues through the existing host while time passes.
+3. Open Bank directly from the Roster dashboard: no Back to Character control should appear; bottom Roster returns to the dashboard. Returning from a character-origin Bank and tapping Roster a second time should also reach the dashboard, where you can intentionally inspect another character.
+4. From Character1/Equipment open Bank, choose Character2 as equipment target and equip an available item. Back returns to Character1/Equipment; the item remains equipped by Character2 and the Bank stock is conserved. Choosing a target must not make that character active or create a new inventory.
+5. Run all EditMode and PlayMode tests; record actual discovery/pass/fail/skip counts. The additional rendered test checks scroll only for overflowing content. Bounds/source checks are not Unity test execution.
+
+This addition is a follow-up commit on the already-published review branch, preserving its history without a force push. It is not merged into main.
