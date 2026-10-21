@@ -241,7 +241,8 @@ namespace Idlebound.Foundation.Tests
         public void RecipeLevelGateUsesExactProductionCurveAndCookingReachesLevelTwo()
         {
             var s = Session(); Gather(s, "fishing-1", 30);
-            for (int i = 0; i < 6; i++) { Start(s, "cooked-shrimp"); s.SettleTo(s.LastSettledTicks + T(5)); }
+            Start(s, "cooked-shrimp");
+            for (int i = 0; i < 6; i++) { s.SettleTo(s.LastSettledTicks + T(5)); }
             Assert.That(Skill(s, "character-1", "cooking").StoredXp, Is.EqualTo(600m));
             Assert.That(Skill(s, "character-1", "cooking").Level, Is.EqualTo(2));
             Assert.That(s.StartProductionAt(s.LastSettledTicks, "character-1", "cooked-sardine", false, out _), Is.False);

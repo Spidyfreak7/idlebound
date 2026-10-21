@@ -86,7 +86,7 @@ namespace Idlebound.Foundation.Development
                         (session.PartialTicks(character.Id) / (double)TimeSpan.TicksPerSecond).ToString("0.0") +
                         "/" + (activity.DurationTicks / (double)TimeSpan.TicksPerSecond).ToString("0.0") + "s";
                     if (activity != null && session.Production.Recipes.Any(r => r.Id == activity.Id) &&
-                        !session.ProductionJobs.ContainsKey(character.Id)) status = activity.DisplayName + " • Ready for next Start";
+                        !session.ProductionJobs.ContainsKey(character.Id)) status = activity.DisplayName + " • Out of materials";
                     if (session.Encounters.TryGetValue(character.Id, out var encounter))
                         status = "Fighting " + encounter.MonsterId + " • enemy HP " + encounter.EnemyHp +
                             " • next hit " + (encounter.PlayerRemainingTicks / (double)TimeSpan.TicksPerSecond).ToString("0.0") + "s";
@@ -145,7 +145,7 @@ namespace Idlebound.Foundation.Development
                 }
                 GUILayout.Label("PRODUCTION — ONE JOB PER START", title);
                 GUILayout.Label("Replacement/swap eligibility includes inputs refunded from interrupted jobs; bank counts show unreserved stock.", label);
-                GUILayout.Label("Inputs reserved at start; unfinished cancellation/change/swap refunds once. Completed jobs grant output/XP only. One job per Start; no automatic queue.", label);
+                GUILayout.Label("Inputs reserved at start; unfinished cancellation/change/swap refunds once. Completed jobs grant output/XP only. Repeats until out of materials; Start resumes stopped production.", label);
                 GUILayout.BeginHorizontal();
                 foreach (string id in new[] { "smithing", "crafting", "cooking" })
                     if (GUILayout.Button(session.Skills.First(s => s.Id == id).DisplayName, button, GUILayout.MinHeight(64)))
@@ -171,7 +171,7 @@ namespace Idlebound.Foundation.Development
                     bool canStart = session.CanStartProduction(inspected, recipe, occupied);
                     GUI.enabled = previousEnabled && eligible && canStart && !working;
                     string action = working ? "Job running" : !eligible ? "Level locked" : !canStart
-                        ? "Insufficient ingredients" : occupied ? "Swap Assignment and Start" : "Start one job";
+                        ? "Insufficient ingredients" : occupied ? "Swap Assignment and Start" : "Start";
                     if (GUILayout.Button(action + " — " + recipe.DisplayName, button, GUILayout.MinHeight(64)))
                     {
                         session.StartProductionAt(session.LastSettledTicks, inspected, recipe.Id, occupied, out var error);

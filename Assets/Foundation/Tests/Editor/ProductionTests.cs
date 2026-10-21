@@ -168,7 +168,7 @@ namespace Idlebound.Foundation.Tests
             Assert.That(s.StartProductionAt(T(20), "character-1", "dev-bronze-blade", false, out _), Is.False);
             Assert.That(s.AssignAt(T(20), "character-2", "dev-wood-bow", true, out _), Is.False);
             Assert.That(s.Quantity("metal-1"), Is.EqualTo(2));
-            s.SettleTo(T(35)); Start(s, "dev-bronze-blade");
+            s.SettleTo(T(35)); Assert.That(s.StartProductionAt(T(35), "character-1", "dev-bronze-blade", false, out _), Is.False);
             Assert.That(s.Quantity("metal-1"), Is.Zero);
             s.SettleTo(T(50));
             Assert.That(s.Quantity("dev-blade"), Is.EqualTo(2));
@@ -302,10 +302,10 @@ namespace Idlebound.Foundation.Tests
         [Test]
         public void ProductionXpReachesKnownMilestoneWithoutInventingIntermediateLevels()
         {
-            var s = Session(); Gather(s, "fishing-1", 25);
+            var s = Session(); Gather(s, "fishing-1", 25); Start(s, "dev-shrimp-meal");
             for (int i = 0; i < 5; i++)
             {
-                Start(s, "dev-shrimp-meal"); s.SettleTo(s.LastSettledTicks + T(5));
+                s.SettleTo(s.LastSettledTicks + T(5));
                 Assert.That(Skill(s, "character-1", "cooking").Level, Is.EqualTo(i == 4 ? 30 : 1));
             }
             Assert.That(s.Quantity("dev-meal"), Is.EqualTo(5));
@@ -342,7 +342,8 @@ namespace Idlebound.Foundation.Tests
         {
             var s = Session(); Gather(s, "fishing-1", 5);
             Start(s, "dev-shrimp-meal", "character-2"); s.SettleTo(T(10));
-            Assert.That(s.Quantity("fish-1"), Is.EqualTo(1));
+            Assert.That(s.Quantity("fish-1"), Is.Zero, "The gathered fish is reserved by the next automatic cycle.");
+            Assert.That(s.ProductionJobs.ContainsKey("character-2"), Is.True);
             Assert.That(s.Quantity("dev-meal"), Is.EqualTo(1));
         }
 
@@ -351,7 +352,7 @@ namespace Idlebound.Foundation.Tests
         {
             var s = Session(Row(quantity: long.MaxValue.ToString(CultureInfo.InvariantCulture)));
             Gather(s, "mining-1", 20); Start(s, "dev-test"); s.SettleTo(T(35));
-            Start(s, "dev-test");
+            Assert.That(s.ProductionJobs.ContainsKey("character-1"), Is.True);
             Assert.Throws<OverflowException>(() => s.SettleTo(T(50)));
             Assert.That(s.LastSettledTicks, Is.EqualTo(T(35)));
             Assert.That(s.Quantity("dev-output"), Is.EqualTo(long.MaxValue));
@@ -389,11 +390,12 @@ namespace Idlebound.Foundation.Tests
             var s = Session(Row(skill: "cooking", category: "Food", inputs: "fish-1:1", seconds: "5") + "\n" +
                 Row(id: "dev-advanced", output: "dev-advanced-item", skill: "cooking", category: "Food",
                     inputs: "fish-1:1", seconds: "5", level: "30"));
-            Gather(s, "fishing-1", 30);
+            Gather(s, "fishing-1", 35); // Includes the next reserved cycle under the legacy non-refund fixture.
             Assert.That(s.StartProductionAt(s.LastSettledTicks, "character-1", "dev-advanced", false, out _), Is.False);
+            Start(s, "dev-test");
             for (int i = 0; i < 5; i++)
             {
-                Start(s, "dev-test"); s.SettleTo(s.LastSettledTicks + T(5));
+                s.SettleTo(s.LastSettledTicks + T(5));
             }
             Start(s, "dev-advanced"); s.SettleTo(s.LastSettledTicks + T(5));
             Assert.That(s.Quantity("dev-advanced-item"), Is.EqualTo(1));

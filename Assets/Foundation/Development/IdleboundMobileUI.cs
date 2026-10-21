@@ -181,7 +181,9 @@ namespace Idlebound.Foundation.Development
             generation = host.Generation; signature = Structure();
             Canvas.ForceUpdateCanvases(); ApplyEquipmentLayout(); scroll.verticalNormalizedPosition = position;
         }
-        private static string Status(CharacterView c) => c.Status == WorkStatus.NeedsAttention ? "Needs Attention" : c.Status.ToString();
+        private static string Status(CharacterView c) => c.Status == WorkStatus.NeedsAttention
+            ? c.Hp > 0 && new[] { "smithing", "crafting", "cooking" }.Contains(c.SkillId) ? "Out of materials" : "Needs Attention"
+            : c.Status.ToString();
         private string Role(string id) => Session.IsActive(id) ? "ACTIVE • full online XP" : "BACKGROUND • " + Session.BackgroundEfficiency(id, Model.Character(id).SkillId ?? "mining").ToString("P0") + " XP";
         private void Summary(Transform parent, string id)
         {
@@ -301,7 +303,7 @@ namespace Idlebound.Foundation.Development
                 {
                     BindProgress(Progress(card), () => Model.Character(id).Progress);
                     if (a.Kind == "Production") Bind(Label(card,"",18,Gold), () => Session.ProductionJobs.ContainsKey(id)
-                        ? "Running · " + Model.Character(id).Progress.ToString("P0") : "Completed");
+                        ? "Running · " + Model.Character(id).Progress.ToString("P0") : "Out of materials");
                     if (a.Kind == "Combat") CombatDetails(card,id);
                     if (a.Kind != "Production" || Session.ProductionJobs.ContainsKey(id))
                     {

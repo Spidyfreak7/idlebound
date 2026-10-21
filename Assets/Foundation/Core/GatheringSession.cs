@@ -93,7 +93,9 @@ namespace Idlebound.Foundation
             public long Remaining;
             public long TotalCycles;
             public decimal Xp;
-            public bool FinishedProduction;
+            public bool StoppedProduction;
+            public ActivityDefinition Activity;
+            public ProductionRecipe Recipe;
         }
 
         public void SettleTo(long absoluteTicks, bool offline = false)
@@ -104,41 +106,8 @@ namespace Idlebound.Foundation
             long eligible = offline ? Math.Min(elapsed, BaseOfflineTicks) : elapsed;
             var receipt = offline ? new OfflineReport { AwayTicks = elapsed, EligibleTicks = eligible, Capped = elapsed > eligible } : null;
             if (receipt != null) foreach (var c in Characters) receipt.For(c.Id,Assignments.TryGetValue(c.Id,out var target) ? target : null);
-            var plans = new List<Settlement>();
             var nextInventory = new Dictionary<string, long>(inventory);
-            // Preflight all rewards before mutating anything; checked overflow cannot partly pay a batch.
-            foreach (var assignment in Assignments.OrderBy(a => a.Key, StringComparer.Ordinal))
-            {
-                if (Combat.Monsters.Any(m => m.Id == assignment.Value)) continue;
-                var activity = Activities.First(a => a.Id == assignment.Value);
-                var recipe = Production.Recipes.FirstOrDefault(r => r.Id == assignment.Value);
-                if (recipe != null && !productionJobs.ContainsKey(assignment.Key)) continue;
-                decimal ticks = PartialTicks(assignment.Key) + (decimal)eligible;
-                long cycles = recipe == null ? checked((long)decimal.Floor(ticks / activity.DurationTicks))
-                    : ticks >= activity.DurationTicks ? 1 : 0;
-                long remainder = recipe == null ? (long)(ticks % activity.DurationTicks)
-                    : cycles == 1 ? 0 : (long)ticks;
-                var skill = Characters.First(c => c.Id == assignment.Key).Skills.First(s => s.SkillId == activity.SkillId);
-                decimal rate = XpPolicy.Efficiency(IsActive(assignment.Key), offline, activity.SkillId, EffectsFor(assignment.Key));
-                decimal xp = checked(cycles * (activity.XpPerCycle ?? 0m) * rate);
-                decimal nextXp = curve.ApplyAward(skill.StoredXp, xp);
-                curve.KnownLevelFloor(nextXp);
-                long totalCycles = checked(CompletedCycles(assignment.Key) + cycles);
-                if (cycles > 0)
-                {
-                    long before = nextInventory.TryGetValue(activity.ResourceId, out var count) ? count : 0;
-                    nextInventory[activity.ResourceId] = checked(before + checked(cycles * (recipe?.OutputQuantity ?? 1)));
-                }
-                if (receipt != null)
-                {
-                    var outcome = receipt.For(assignment.Key,assignment.Value);
-                    outcome.Item(activity.ResourceId,checked(cycles * (recipe?.OutputQuantity ?? 1)));
-                    outcome.Award(activity.SkillId,nextXp - skill.StoredXp);
-                    if (recipe != null && cycles == 1) outcome.StopReason = "Job completed";
-                }
-                plans.Add(new Settlement { CharacterId = assignment.Key, Skill = skill,
-                    Remaining = remainder, TotalCycles = totalCycles, Xp = xp, FinishedProduction = recipe != null && cycles == 1 });
-            }
+            var plans = PlanActivities(eligible,offline,nextInventory,receipt);
             var combatBatch = PlanCombat(eligible, offline, nextInventory, receipt);
             inventory.Clear();
             foreach (var pair in nextInventory) inventory.Add(pair.Key, pair.Value);
@@ -147,7 +116,7 @@ namespace Idlebound.Foundation
                 partialTicks[plan.CharacterId] = plan.Remaining;
                 completedCycles[plan.CharacterId] = plan.TotalCycles;
                 plan.Skill.Award(plan.Xp, curve);
-                if (plan.FinishedProduction) productionJobs.Remove(plan.CharacterId);
+                if (plan.StoppedProduction) productionJobs.Remove(plan.CharacterId);
             }
             CommitCombat(combatBatch);
             // Advance across ineligible offline excess too, so a repeated call cannot reclaim it.

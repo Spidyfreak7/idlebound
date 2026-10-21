@@ -186,6 +186,32 @@ namespace Idlebound.Foundation.Tests
             Assert.That(host.Runtime.Session,Is.SameAs(session)); Assert.That(session.Quantity(item.Id),Is.EqualTo(1));
         }
         [UnityTest]
+        public IEnumerator AllProductionCardsContinueAcrossBankAndStopOnlyWhenMaterialsRunOut()
+        {
+            var host = GameSessionHost.Instance;
+            host.Runtime.SetPresence(host,Time.realtimeSinceStartupAsDouble,false,true); host.SetRunning(false);
+            Button("Inspect Character 1").onClick.Invoke(); yield return null;
+            foreach (var entry in new[] {
+                "mining|smithing|mining-1|bronze-dagger|metal-1|bronze-dagger-item|2|15",
+                "woodcutting|crafting|woodcutting-1|wood-shortbow|wood-1|wood-shortbow-item|2|15",
+                "fishing|cooking|fishing-1|cooked-shrimp|fish-1|cooked-shrimp-item|1|5" })
+            {
+                var data = entry.Split('|'); int cost = int.Parse(data[6]), seconds = int.Parse(data[7]);
+                host.Model.ShowSkill(data[0]); Assert.That(host.Model.Start(data[2]),Is.True); host.Step(3 * cost * 5);
+                host.Model.ShowSkill(data[1]); Button("Activities").onClick.Invoke(); yield return null;
+                var start = ActivityStart(data[3]); Assert.That(start.GetComponentInChildren<Text>().text,Is.EqualTo("Start"));
+                start.onClick.Invoke(); yield return null; host.Step(2 * seconds + seconds / 2);
+                Button("Bank").onClick.Invoke(); yield return null; Button("Back to Character").onClick.Invoke(); yield return null;
+                Assert.That(host.Runtime.Session.Quantity(data[5]),Is.EqualTo(2)); Assert.That(host.Runtime.Session.ProductionJobs.Count,Is.EqualTo(1));
+                Button("Cancel job").onClick.Invoke(); yield return null; Assert.That(host.Runtime.Session.Quantity(data[4]),Is.EqualTo(cost));
+                ActivityStart(data[3]).onClick.Invoke(); yield return null; host.Step(seconds); yield return new WaitForSecondsRealtime(.15f);
+                Assert.That(host.Runtime.Session.Quantity(data[5]),Is.EqualTo(3)); Assert.That(host.Runtime.Session.Quantity(data[4]),Is.Zero);
+                Assert.That(host.Runtime.Session.ProductionJobs,Is.Empty);
+                Assert.That(root.GetComponentsInChildren<Text>().Any(t => t.text == "Out of materials"),Is.True);
+                Assert.That(ActivityStart(data[3]).interactable,Is.False);
+            }
+        }
+        [UnityTest]
         public IEnumerator BankTilesShowCatalogNamesAndRefreshQuantitiesWithoutResettingSession()
         {
             var host = GameSessionHost.Instance; var session = host.Runtime.Session;

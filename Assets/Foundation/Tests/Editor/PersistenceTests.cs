@@ -190,13 +190,13 @@ namespace Idlebound.Foundation.Tests
             var h = Open(Epoch + T(300)); Assert.That(Xp(h.Session),Is.Zero); Assert.That(Xp(h.Session,"character-2","woodcutting"),Is.Zero);
             Assert.That(h.Session.Quantity("metal-1"),Is.EqualTo(60)); Assert.That(h.Session.Quantity("wood-1"),Is.EqualTo(60));
         }
-        [Test] public void OfflineProductionRemainsOneJobAndNeverRefundsCompletedInputs()
+        [Test] public void OfflineProductionRepeatsAndNeverRefundsCompletedInputs()
         {
             var g = Open(); Assign(g.Session); g.Session.SettleTo(T(20)); Produce(g.Session); g.Session.SettleTo(T(27)); g.Save(Epoch + T(27));
-            var h = Open(Epoch + T(1827)); Assert.That(h.Session.Quantity("bronze-dagger-item"),Is.EqualTo(1)); Assert.That(h.Session.Quantity("metal-1"),Is.EqualTo(2));
+            var h = Open(Epoch + T(1827)); Assert.That(h.Session.Quantity("bronze-dagger-item"),Is.EqualTo(2)); Assert.That(h.Session.Quantity("metal-1"),Is.Zero);
             Assert.That(h.Session.ProductionJobs,Is.Empty); Assert.That(Xp(h.Session,skill:"smithing"),Is.Zero);
-            h.Session.UnassignAt(h.Session.LastSettledTicks,"character-1"); Assert.That(h.Session.Quantity("metal-1"),Is.EqualTo(2));
-            Assert.That(h.Pending.Characters.Single(c => c.Character == "character-1").StopReason,Is.EqualTo("Job completed"));
+            h.Session.UnassignAt(h.Session.LastSettledTicks,"character-1"); Assert.That(h.Session.Quantity("metal-1"),Is.Zero);
+            Assert.That(h.Pending.Characters.Single(c => c.Character == "character-1").StopReason,Is.EqualTo("Out of materials"));
         }
         [Test] public void PerCharacterReceiptsExcludeInitialStockAndReservations()
         {
@@ -204,7 +204,10 @@ namespace Idlebound.Foundation.Tests
             var h = Open(Epoch + T(320)); var report = h.Pending;
             Assert.That(report.Characters.Single(c => c.Character == "character-1").Items.Single().Quantity,Is.EqualTo(60));
             Assert.That(report.Characters.Single(c => c.Character == "character-2").Items.Single().Id,Is.EqualTo("bronze-dagger-item"));
-            Assert.That(h.Session.Quantity("metal-1"),Is.EqualTo(62)); Assert.That(report.Characters.SelectMany(c => c.Xp),Is.Empty);
+            Assert.That(h.Session.Quantity("metal-1"),Is.EqualTo(22));
+            Assert.That(h.Session.Quantity("bronze-dagger-item"),Is.EqualTo(20));
+            Assert.That(report.Characters.Single(c => c.Character == "character-2").Items.Single().Quantity,Is.EqualTo(20));
+            Assert.That(report.Characters.SelectMany(c => c.Xp),Is.Empty);
         }
         [Test] public void CombatOfflineLootHpDeathAndNoDuplicateReplay()
         {

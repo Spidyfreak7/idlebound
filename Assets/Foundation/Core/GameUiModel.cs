@@ -148,7 +148,7 @@ namespace Idlebound.Foundation
                 result.Progress = 1 - fight.PlayerRemainingTicks / (double)Session.Profile(id).IntervalTicks;
             }
             else if (activity != null && activity.DurationTicks > 0)
-                result.Progress = production && !Session.ProductionJobs.ContainsKey(id) ? 1 : Session.PartialTicks(id) / (double)activity.DurationTicks;
+                result.Progress = production && !Session.ProductionJobs.ContainsKey(id) ? 0 : Session.PartialTicks(id) / (double)activity.DurationTicks;
             return result;
         }
         public SkillView[] Skills(string id) => Session.Characters.First(c => c.Id == id).Skills.Select(s =>
@@ -169,7 +169,7 @@ namespace Idlebound.Foundation
             foreach (var r in Session.Production.Recipes.Where(r => r.SkillId == SkillFilter))
                 result.Add(new ActivityView { Id = r.Id, Name = PlayerNames.Display(r.DisplayName), Skill = r.SkillId, Kind = "Production", Level = r.RequiredLevel,
                     Duration = r.DurationTicks, Xp = r.XpReward, Description = r.OutputQuantity + " × " + r.OutputName +
-                        " • one job per Start; unfinished inputs refunded on cancellation." + (r.IsBalanceAssumption ? " Starter balance assumption." : " Development recipe."),
+                        " • Repeats until out of materials; unfinished inputs refunded on cancellation." + (r.IsBalanceAssumption ? " Starter balance assumption." : " Development recipe."),
                     Locked = !Session.MeetsRequirement(id, Session.Activities.First(a => a.Id == r.Id)),
                     CanStart = Session.CanStartProduction(id, r, true),
                     Inputs = r.Inputs.Select(p => new StockView { Id = p.Key, Name = PlayerNames.Display(Session.BankItems[p.Key]), Required = p.Value, Available = Session.Quantity(p.Key) }).ToArray() });
