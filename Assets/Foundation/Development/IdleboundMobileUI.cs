@@ -16,7 +16,7 @@ namespace Idlebound.Foundation.Development
         private GameSessionHost host;
         private GameUiModel Model => host.Model;
         private GatheringSession Session => host.Runtime.Session;
-        private RectTransform safeRoot, body, characterTabs, modalLayer, activityHeader;
+        private RectTransform safeRoot, body, characterTabs, modalLayer, activityHeader, titleBar;
         private ActivityHeaderFeedback headerFeedback;
         private ScrollRect scroll;
         private Text heading, notice;
@@ -52,12 +52,12 @@ namespace Idlebound.Foundation.Development
             scaler.referenceResolution = new Vector2(480, 854); scaler.matchWidthOrHeight = 0;
             canvasRoot.gameObject.AddComponent<GraphicRaycaster>(); Surface(canvasRoot, Background);
             safeRoot = Column(canvasRoot, "Safe Area", 12); Fill(safeRoot);
-            var titleBar = Row(safeRoot,32);
+            titleBar = Row(safeRoot,32); titleBar.name = "Dashboard title strip";
             Label(titleBar,"IDLEBOUND",22,Gold);
             heading = Label(titleBar,"",18,Muted);
-            notice = Label(safeRoot, "", 18, Gold, 32);
             activityHeader = Column(safeRoot,"Persistent activity header",6); Surface(activityHeader,Panel);
             activityHeader.GetComponent<VerticalLayoutGroup>().spacing = 4;
+            notice = Label(safeRoot, "", 18, Gold); notice.name = "Transient feedback"; notice.gameObject.SetActive(false);
             characterTabs = Row(safeRoot, 58);
             var scrollRoot = Node("Screen content", safeRoot); Size(scrollRoot, 0, 1);
             scroll = scrollRoot.gameObject.AddComponent<ScrollRect>(); scroll.horizontal = false;
@@ -132,7 +132,8 @@ namespace Idlebound.Foundation.Development
             foreach (var action in bankBindings) action();
             foreach (var action in modalBindings) action();
             if (shownFeedback != Model.Feedback) { shownFeedback = Model.Feedback; feedbackUntil = Time.unscaledTime + 4; }
-            notice.text = host.ClockError ?? (localNotice.Length > 0 ? localNotice : Time.unscaledTime < feedbackUntil ? shownFeedback : "Prototype • progress is not saved");
+            notice.text = host.ClockError ?? (localNotice.Length > 0 ? localNotice : Time.unscaledTime < feedbackUntil ? shownFeedback : "");
+            notice.gameObject.SetActive(!string.IsNullOrEmpty(notice.text));
         }
         private void Bind(Text label, Func<string> value) { bindings.Add(() => { if (label != null) label.text = value(); }); label.text = value(); }
         private void BindProgress(Image bar, Func<double> value) { bindings.Add(() => { if (bar != null) SetProgress(bar,value()); }); SetProgress(bar,value()); }
@@ -143,6 +144,7 @@ namespace Idlebound.Foundation.Development
             Clear(body); Clear(characterTabs); Clear(activityHeader); bindings.Clear(); bankBindings.Clear(); grids.Clear(); refreshBank = null;
             characterTabs.gameObject.SetActive(Model.CharacterOpen);
             activityHeader.gameObject.SetActive(Model.CharacterOpen);
+            titleBar.gameObject.SetActive(!Model.CharacterOpen);
             heading.text = Model.CharacterOpen ? Model.CharacterTab.ToString() : Model.Screen == MainScreen.CollectionLog ? "Collection Log" : Model.Screen.ToString();
             foreach (var tab in mainTabs) tab.Value.GetComponent<Image>().color = tab.Key == Model.Screen ? new Color32(96,78,46,255) : Raised;
             if (Model.CharacterOpen)
@@ -235,7 +237,6 @@ namespace Idlebound.Foundation.Development
                 var t = b.GetComponentInChildren<Text>(); t.fontSize = 18;
                 Bind(t, () => { var s = Model.Skills(id).First(k => k.Id == key); return s.Name + "\nLv " + s.Level + " • " + s.Progress.ToString("P0") + "\n" + s.Xp.ToString("0.#") + " XP"; });
             }
-            Label(body,"In-memory prototype • progress is not saved.",18,Muted,32);
         }
         private RectTransform Grid(Transform parent, string name)
         {
@@ -246,7 +247,6 @@ namespace Idlebound.Foundation.Development
         private void Activities()
         {
             string id = Model.InspectedId;
-            Button(body,"Stop / cancel current assignment", () => Act(() => Model.Stop()));
             Button(body,"Skill: " + Session.Skills.First(s => s.Id == Model.SkillFilter).DisplayName + " — change", () =>
                 Modal("Choose a skill", content =>
                 {
@@ -276,6 +276,14 @@ namespace Idlebound.Foundation.Development
                     BindProgress(Progress(card), () => Model.Character(id).Progress);
                     if (a.Kind == "Production") Bind(Label(card,"",20,Gold), () => Session.ProductionJobs.ContainsKey(id) ? "Job running — ingredients reserved" : "Completed — start another job when ready");
                     if (a.Kind == "Combat") CombatDetails(card,id,a.Id);
+                    if (a.Kind != "Production" || Session.ProductionJobs.ContainsKey(id))
+                    {
+                        var controls = Row(card,48);
+                        var cancel = Button(controls,a.Kind == "Production" ? "Cancel job" : "Stop activity",() => Act(() => Model.Stop()),false,48);
+                        var size = Size(cancel,48); size.minWidth = size.preferredWidth = 156; size.flexibleWidth = 0;
+                        controls.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;
+                        cancel.GetComponent<Image>().color = Panel; cancel.GetComponentInChildren<Text>().color = Muted;
+                    }
                 }
                 var start = Button(card,a.Occupant == null ? a.Kind == "Production" ? "Start one job" : "Start activity" : "Swap Assignment…", () =>
                 {
@@ -302,7 +310,7 @@ namespace Idlebound.Foundation.Development
         private void Equipment()
         {
             string id = Model.InspectedId;
-            var profile = Label(body,"",21); Bind(profile, () => { var p = Session.Profile(id); return p.Style + " • Damage " + p.Damage + " • Defense " + p.Defense + " • " + GameUiModel.Seconds(p.IntervalTicks) + "s / attack"; });
+            var profile = Label(body,"",18); Bind(profile, () => { var p = Session.Profile(id); return p.Style + " • Damage " + p.Damage + " • Defense " + p.Defense + " • " + GameUiModel.Seconds(p.IntervalTicks) + "s / attack"; });
             equipmentPanel = Node("Ten-slot loadout",body); Size(equipmentPanel,EquipmentLayout.Height); Surface(equipmentPanel,Panel);
             equipmentHero = Node("Character",equipmentPanel);
             var image = equipmentHero.gameObject.AddComponent<Image>(); image.sprite = adventurerSprite != null ? adventurerSprite : PixelArtwork.Icon("hero"); image.preserveAspect = true; image.raycastTarget = false;
@@ -319,7 +327,7 @@ namespace Idlebound.Foundation.Development
                 Fill(icon.rectTransform,10);
                 icon.color = occupied ? Ink : new Color(Muted.r,Muted.g,Muted.b,.55f);
             }
-            Label(body,"Tap a slot to browse bank equipment. Green/red comparisons show changed stats only. Enchanting is not implemented. All current gear stats are development-only.",19,Muted);
+            Label(body,"Tap a slot to browse gear and compare changed stats.",19,Muted);
         }
         private void ApplyEquipmentLayout()
         {

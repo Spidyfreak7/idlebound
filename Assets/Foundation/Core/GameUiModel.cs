@@ -62,7 +62,7 @@ namespace Idlebound.Foundation
         public bool CharacterOpen { get; private set; }
         private readonly Dictionary<CharacterScreen, bool> sceneCollapsed = new Dictionary<CharacterScreen, bool>
         {
-            { CharacterScreen.Overview, false }, { CharacterScreen.Equipment, true }, { CharacterScreen.Activities, true }
+            { CharacterScreen.Overview, false }, { CharacterScreen.Equipment, false }, { CharacterScreen.Activities, false }
         };
         public bool SceneCollapsed { get => sceneCollapsed[CharacterTab]; set => sceneCollapsed[CharacterTab] = value; }
         public string Search { get; set; } = "";

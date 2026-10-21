@@ -50,9 +50,9 @@ namespace Idlebound.Foundation.Tests
             Assert.That(host.Model.InspectedId,Is.EqualTo("character-2")); Assert.That(host.Runtime.Session.ActiveCharacterId,Is.EqualTo("character-1"));
             Button("Make Active").onClick.Invoke(); yield return null; Assert.That(host.Runtime.Session.ActiveCharacterId,Is.EqualTo("character-2"));
             Button("Activities").onClick.Invoke(); yield return null;
-            Assert.That(root.GetComponentsInChildren<ActivityStage>().Length,Is.Zero,"Activities must not keep the large animation stage.");
+            Assert.That(root.GetComponentsInChildren<ActivityStage>().Length,Is.EqualTo(1),"Activities defaults to the pinned live scene.");
             Button("Equipment").onClick.Invoke(); yield return null;
-            Assert.That(root.GetComponentsInChildren<ActivityStage>().Length,Is.Zero,"Equipment must use a static central loadout.");
+            Assert.That(root.GetComponentsInChildren<ActivityStage>().Length,Is.EqualTo(1),"Equipment keeps the pinned live scene above its static loadout.");
         }
         private static Rect BoundsIn(RectTransform child,RectTransform parent)
         {
@@ -91,7 +91,47 @@ namespace Idlebound.Foundation.Tests
                 Assert.That(root.GetComponentsInChildren<Text>().Any(t => t.text == slot.ToString()),Is.True);
                 Button("Close").onClick.Invoke(); yield return null;
             }
-            Assert.That(root.GetComponentsInChildren<ActivityStage>().Length,Is.Zero);
+            Assert.That(root.GetComponentsInChildren<ActivityStage>().Length,Is.EqualTo(1));
+        }
+        [UnityTest]
+        public IEnumerator CharacterPagesStartWithTheLiveHeaderWithoutTitleBannerOrGlobalStop()
+        {
+            var host = GameSessionHost.Instance;
+            host.Runtime.SetPresence(host,Time.realtimeSinceStartupAsDouble,false,true); host.SetRunning(false);
+            var session = host.Runtime.Session; long time = session.LastSettledTicks;
+            Button("Inspect Character 1").onClick.Invoke(); yield return null;
+            foreach (var tab in new[] { "Overview","Equipment","Activities" })
+            {
+                Button(tab).onClick.Invoke(); yield return null;
+                var safe = root.GetComponentsInChildren<RectTransform>().Single(r => r.name == "Safe Area");
+                var first = safe.Cast<Transform>().First(t => t.gameObject.activeInHierarchy);
+                Assert.That(first.name,Is.EqualTo("Persistent activity header"));
+                Assert.That(first.GetComponentInChildren<ActivityStage>(),Is.Not.Null);
+                Assert.That(root.GetComponentsInChildren<Text>().Any(t => t.text == "IDLEBOUND" || t.text.Contains("progress is not saved")),Is.False);
+                Assert.That(root.GetComponentsInChildren<Button>().Any(b => b.GetComponentInChildren<Text>()?.text == "Stop / cancel current assignment"),Is.False);
+            }
+            Assert.That(host.Runtime.Session,Is.SameAs(session)); Assert.That(session.LastSettledTicks,Is.EqualTo(time));
+            Assert.That(session.Inventory,Is.Empty); Assert.That(session.Assignments,Is.Empty);
+        }
+        [UnityTest]
+        public IEnumerator ProductionCancellationBelongsToItsExpandedActivityCard()
+        {
+            var host = GameSessionHost.Instance;
+            host.Runtime.SetPresence(host,Time.realtimeSinceStartupAsDouble,false,true); host.SetRunning(false);
+            Button("Inspect Character 1").onClick.Invoke(); yield return null;
+            host.Model.ShowSkill("mining"); host.Model.Start("mining-1"); host.Step(10);
+            Button("Activities").onClick.Invoke(); yield return null;
+            Button("Skill: Mining — change").onClick.Invoke(); yield return null;
+            Button("Smithing").onClick.Invoke(); yield return null;
+            Button("+ Bronze dagger").onClick.Invoke(); yield return null;
+            Button("Start one job").onClick.Invoke(); yield return null;
+            var session = host.Runtime.Session; long time = session.LastSettledTicks;
+            var cancel = Button("Cancel job");
+            Assert.That(cancel.transform.parent.parent.GetComponentsInChildren<Button>().Any(b => b.GetComponentInChildren<Text>()?.text == "Start one job"),Is.True);
+            Assert.That(((RectTransform)cancel.transform).rect.height,Is.LessThanOrEqualTo(48.1f));
+            cancel.onClick.Invoke(); yield return null;
+            Assert.That(session.ProductionJobs,Is.Empty); Assert.That(session.Quantity("metal-1"),Is.EqualTo(2));
+            Assert.That(session.Quantity("bronze-dagger-item"),Is.Zero); Assert.That(session.LastSettledTicks,Is.EqualTo(time));
         }
         [UnityTest]
         public IEnumerator BankTilesShowCatalogNamesAndRefreshQuantitiesWithoutResettingSession()
@@ -132,18 +172,18 @@ namespace Idlebound.Foundation.Tests
             Assert.That(root.GetComponentsInChildren<Button>().Any(b => b.GetComponentInChildren<Text>() != null &&
                 new[] { "Open activity scene","Expand activity scene","Collapse activity scene" }.Contains(b.GetComponentInChildren<Text>().text)),Is.False);
             Button("Activities").onClick.Invoke(); yield return null;
-            Assert.That(header.GetComponentsInChildren<ActivityStage>().Length,Is.Zero); Assert.That(host.Model.SceneCollapsed,Is.True);
+            Assert.That(header.GetComponentsInChildren<ActivityStage>().Length,Is.EqualTo(1)); Assert.That(host.Model.SceneCollapsed,Is.False);
             var toggle = header.GetComponentsInChildren<Button>().Single(b => b.name == "Activity header toggle");
             Assert.That(((RectTransform)toggle.transform).rect.width,Is.LessThanOrEqualTo(48.1f));
             long time = session.LastSettledTicks; toggle.onClick.Invoke(); yield return null;
-            Assert.That(header.GetComponentInChildren<ActivityStage>(),Is.Not.Null);
+            Assert.That(header.GetComponentInChildren<ActivityStage>(),Is.Null);
             Assert.That(session.Assignments,Is.Empty); Assert.That(session.Inventory,Is.Empty); Assert.That(session.LastSettledTicks,Is.EqualTo(time));
             header.GetComponentsInChildren<Button>().Single(b => b.name == "Activity header toggle").onClick.Invoke(); yield return null;
             host.Model.ShowSkill("mining"); Assert.That(host.Model.Start("mining-1"),Is.True); host.Step(5);
             yield return new WaitForSecondsRealtime(.15f);
             Assert.That(header.GetComponentsInChildren<Text>().Any(t => t.text.Contains("Mining")),Is.True);
             Button("Equipment").onClick.Invoke(); yield return null;
-            Assert.That(host.Model.SceneCollapsed,Is.True); Assert.That(header.GetComponentsInChildren<ActivityStage>().Length,Is.Zero);
+            Assert.That(host.Model.SceneCollapsed,Is.False); Assert.That(header.GetComponentsInChildren<ActivityStage>().Length,Is.EqualTo(1));
             Assert.That(header.GetComponentsInChildren<Text>().Any(t => t.text.Contains("Character 1") && t.text.Contains("ACTIVE")),Is.True);
             Assert.That(session.Assignments["character-1"],Is.EqualTo("mining-1")); Assert.That(session.Quantity("metal-1"),Is.EqualTo(1));
             Button("Overview").onClick.Invoke(); yield return null;

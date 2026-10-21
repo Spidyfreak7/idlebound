@@ -34,11 +34,13 @@ namespace Idlebound.Foundation.Tests
             }
         }
         [Test]
-        public void NormalPhoneLayoutGivesTheCharacterMoreRoomThanThePreviousLayout()
+        public void NormalPhoneLayoutPrioritizesCompactEquipmentOverTheCharacter()
         {
             var layout = new EquipmentLayout(448);
-            Assert.That(layout.CharacterBounds.width,Is.GreaterThan(150));
-            Assert.That(layout.CharacterBounds.height,Is.GreaterThan(230));
+            Assert.That(EquipmentLayout.Height,Is.EqualTo(320));
+            Assert.That(layout.Slots.Values.Max(r => r.xMax) - layout.Slots.Values.Min(r => r.xMin),Is.LessThanOrEqualTo(304));
+            Assert.That(layout.CharacterBounds.width,Is.LessThanOrEqualTo(112));
+            Assert.That(layout.CharacterBounds.height,Is.LessThanOrEqualTo(130));
             Assert.That(layout.Slots[EquipmentSlot.Mainhand].center.x,Is.LessThan(layout.CharacterBounds.xMin));
             Assert.That(layout.Slots[EquipmentSlot.Offhand].center.x,Is.GreaterThan(layout.CharacterBounds.xMax));
             Assert.That(layout.Slots[EquipmentSlot.Head].yMin,Is.GreaterThan(layout.CharacterBounds.yMax));

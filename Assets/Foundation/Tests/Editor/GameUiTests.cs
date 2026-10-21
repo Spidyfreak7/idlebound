@@ -255,8 +255,8 @@ namespace Idlebound.Foundation.Tests
             Assert.That(m.Session.Inventory,Is.EquivalentTo(before)); Assert.That(m.Session.Assignments[C],Is.EqualTo("mining-1"));
         }
         [TestCase(CharacterScreen.Overview, false)]
-        [TestCase(CharacterScreen.Equipment, true)]
-        [TestCase(CharacterScreen.Activities, true)]
+        [TestCase(CharacterScreen.Equipment, false)]
+        [TestCase(CharacterScreen.Activities, false)]
         public void ActivityHeaderHasScreenSpecificDefaults(CharacterScreen screen,bool collapsed)
         {
             var m = Model(); m.Inspect(C); m.ShowCharacterTab(screen);
@@ -267,10 +267,10 @@ namespace Idlebound.Foundation.Tests
         {
             var m = Model(); Assign(m); m.Runtime.Tick(owner,2); var session = m.Session;
             m.ShowCharacterTab(CharacterScreen.Overview); m.SceneCollapsed = true;
-            m.ShowCharacterTab(CharacterScreen.Equipment); Assert.That(m.SceneCollapsed,Is.True); m.SceneCollapsed = false;
-            m.ShowSkill("mining"); Assert.That(m.SceneCollapsed,Is.True,"Activities defaults compact independently of Equipment.");
+            m.ShowCharacterTab(CharacterScreen.Equipment); Assert.That(m.SceneCollapsed,Is.False); m.SceneCollapsed = true;
+            m.ShowSkill("mining"); Assert.That(m.SceneCollapsed,Is.False,"Activities defaults expanded independently of Overview.");
             m.Navigate(MainScreen.Bank); m.Inspect(C); Assert.That(m.SceneCollapsed,Is.True,"Overview remembers its user choice.");
-            m.ShowCharacterTab(CharacterScreen.Equipment); Assert.That(m.SceneCollapsed,Is.False);
+            m.ShowCharacterTab(CharacterScreen.Equipment); Assert.That(m.SceneCollapsed,Is.True);
             Assert.That(m.Session,Is.SameAs(session)); Assert.That(session.Assignments[C],Is.EqualTo("mining-1"));
             Assert.That(session.PartialTicks(C),Is.EqualTo(T(2))); Assert.That(session.LastSettledTicks,Is.EqualTo(T(2)));
         }
