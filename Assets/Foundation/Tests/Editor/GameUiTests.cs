@@ -23,6 +23,35 @@ namespace Idlebound.Foundation.Tests
         private static void Gear(GameUiModel m,string item = "bronze-dagger-item")
         { m.Session.GrantDevelopmentGearKitAt(m.Session.LastSettledTicks); Assert.That(m.Equip(item),Is.True,m.Feedback); }
 
+        [TestCase(null, "")]
+        [TestCase("", "")]
+        [TestCase("Bronze", "Bronze")]
+        [TestCase("[DEV] Feather", "Feather")]
+        [TestCase("[DEV]Chicken", "Chicken")]
+        [TestCase("[DEV] [DEV] Egg", "Egg")]
+        [TestCase("Feather [DEV] note", "Feather [DEV] note")]
+        [TestCase("dev-chicken", "dev-chicken")]
+        public void PlayerNamesRemoveOnlyLeadingDevelopmentMarkers(string raw,string displayed)
+        { Assert.That(PlayerNames.Display(raw),Is.EqualTo(displayed)); }
+        [Test]
+        public void PlayerProjectionsCleanNamesWithoutChangingCatalogsIdsQuantitiesOrTime()
+        {
+            var m = Model(); m.Inspect(C); m.ShowSkill("melee"); Gear(m);
+            var rawNames = m.Session.BankItems.ToArray(); var inventory = m.Session.Inventory.ToArray();
+            long time = m.Session.LastSettledTicks;
+            Assert.That(rawNames.Any(p => p.Value.StartsWith("[DEV]")),Is.True,"The underlying development labels must remain.");
+            foreach (var item in m.Bank()) Assert.That(item.Name,Is.EqualTo(PlayerNames.Display(m.Session.BankItems[item.Id])));
+            foreach (var monster in m.Session.Combat.Monsters)
+            {
+                Assert.That(monster.Name,Does.StartWith("[DEV]"));
+                Assert.That(m.Activities().Single(a => a.Id == monster.Id).Name,Is.EqualTo(PlayerNames.Display(monster.Name)));
+            }
+            Assert.That(m.Start("dev-chicken"),Is.True);
+            Assert.That(m.Character(C).Assignment,Does.Not.StartWith("[DEV]"));
+            Assert.That(m.Feedback,Does.Not.Contain("[DEV]"));
+            Assert.That(m.Session.BankItems,Is.EquivalentTo(rawNames)); Assert.That(m.Session.Inventory,Is.EquivalentTo(inventory));
+            Assert.That(m.Session.Assignments[C],Is.EqualTo("dev-chicken")); Assert.That(m.Session.LastSettledTicks,Is.EqualTo(time));
+        }
         [Test]
         public void InspectionDoesNotSelectBackgroundCharacter()
         {

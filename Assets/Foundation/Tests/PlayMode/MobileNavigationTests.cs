@@ -13,6 +13,7 @@ namespace Idlebound.Foundation.Tests
         private GameObject root;
         private Button Button(string text) => root.GetComponentsInChildren<Button>(true).First(b =>
             b.gameObject.activeInHierarchy && b.GetComponentInChildren<Text>() != null && b.GetComponentInChildren<Text>().text == text);
+        private Button ActivityStart(string id) => root.GetComponentsInChildren<Button>().Single(b => b.name == "Activity start: " + id);
         [UnitySetUp]
         public IEnumerator Open()
         {
@@ -114,7 +115,7 @@ namespace Idlebound.Foundation.Tests
             Assert.That(session.Inventory,Is.Empty); Assert.That(session.Assignments,Is.Empty);
         }
         [UnityTest]
-        public IEnumerator ProductionCancellationBelongsToItsExpandedActivityCard()
+        public IEnumerator ProductionCancellationBelongsToItsDirectlyActionableActivityCard()
         {
             var host = GameSessionHost.Instance;
             host.Runtime.SetPresence(host,Time.realtimeSinceStartupAsDouble,false,true); host.SetRunning(false);
@@ -123,15 +124,64 @@ namespace Idlebound.Foundation.Tests
             Button("Activities").onClick.Invoke(); yield return null;
             Button("Skill: Mining — change").onClick.Invoke(); yield return null;
             Button("Smithing").onClick.Invoke(); yield return null;
-            Button("+ Bronze dagger").onClick.Invoke(); yield return null;
-            Button("Start one job").onClick.Invoke(); yield return null;
+            ActivityStart("bronze-dagger").onClick.Invoke(); yield return null;
             var session = host.Runtime.Session; long time = session.LastSettledTicks;
             var cancel = Button("Cancel job");
-            Assert.That(cancel.transform.parent.parent.GetComponentsInChildren<Button>().Any(b => b.GetComponentInChildren<Text>()?.text == "Start one job"),Is.True);
+            Assert.That(cancel.transform.parent.parent.GetComponentsInChildren<Button>().Any(b => b.name == "Activity start: bronze-dagger"),Is.True);
             Assert.That(((RectTransform)cancel.transform).rect.height,Is.LessThanOrEqualTo(48.1f));
             cancel.onClick.Invoke(); yield return null;
             Assert.That(session.ProductionJobs,Is.Empty); Assert.That(session.Quantity("metal-1"),Is.EqualTo(2));
             Assert.That(session.Quantity("bronze-dagger-item"),Is.Zero); Assert.That(session.LastSettledTicks,Is.EqualTo(time));
+        }
+        [UnityTest]
+        public IEnumerator ActivityCardsExposeStartRequirementsAndLocksWithoutExpansion()
+        {
+            var host = GameSessionHost.Instance;
+            host.Runtime.SetPresence(host,Time.realtimeSinceStartupAsDouble,false,true); host.SetRunning(false);
+            var session = host.Runtime.Session;
+            Button("Inspect Character 1").onClick.Invoke(); yield return null;
+            Button("Activities").onClick.Invoke(); yield return null;
+            Assert.That(session.Assignments,Is.Empty,"Opening Activities must not start work.");
+            Assert.That(root.GetComponentsInChildren<Button>().Count(b => b.name.StartsWith("Activity start: ")),Is.EqualTo(10));
+            var locked = ActivityStart("mining-10"); Assert.That(locked.interactable,Is.False);
+            Assert.That(locked.GetComponentInChildren<Text>().text,Is.EqualTo("Locked"));
+            locked.onClick.Invoke(); yield return null; Assert.That(session.Assignments,Is.Empty);
+            Assert.That(ActivityStart("mining-1").interactable,Is.True);
+            ActivityStart("mining-1").onClick.Invoke(); yield return null;
+            Assert.That(session.Assignments["character-1"],Is.EqualTo("mining-1"));
+            Assert.That(session.Inventory,Is.Empty); host.Step(5);
+            Button("Skill: Mining — change").onClick.Invoke(); yield return null;
+            Button("Smithing").onClick.Invoke(); yield return null;
+            var start = ActivityStart("bronze-dagger"); Assert.That(start.interactable,Is.False,"One Bronze cannot fund a two-Bronze recipe.");
+            var card = start.transform.parent.parent;
+            Assert.That(card.GetComponentsInChildren<Text>().Any(t => t.text.Contains("Needs 2 Bronze") && t.text.Contains("bank 1")),Is.True);
+            Assert.That(root.GetComponentsInChildren<Text>().Any(t => t.text.Contains("Starter balance") || t.text.Contains("one job per Start") || t.text.Contains("Development recipe")),Is.False);
+            host.Step(5); yield return new WaitForSecondsRealtime(.15f);
+            Assert.That(ActivityStart("bronze-dagger").interactable,Is.True);
+            ActivityStart("bronze-dagger").onClick.Invoke(); yield return null;
+            Assert.That(session.Quantity("metal-1"),Is.Zero); Assert.That(session.ProductionJobs.ContainsKey("character-1"),Is.True);
+            Assert.That(Button("Cancel job"),Is.Not.Null);
+            host.Step(15); yield return new WaitForSecondsRealtime(.15f);
+            Assert.That(session.Quantity("bronze-dagger-item"),Is.EqualTo(1));
+            Button("Bank").onClick.Invoke(); yield return null;
+            Button("Back to Character").onClick.Invoke(); yield return null;
+            Assert.That(host.Model.SkillFilter,Is.EqualTo("smithing")); Assert.That(host.Model.CharacterTab,Is.EqualTo(CharacterScreen.Activities));
+            Assert.That(session.Quantity("bronze-dagger-item"),Is.EqualTo(1)); Assert.That(session.ProductionJobs,Is.Empty);
+        }
+        [UnityTest]
+        public IEnumerator BankGearNamesAndItemDetailsHideDevelopmentPrefixes()
+        {
+            var host = GameSessionHost.Instance;
+            host.Runtime.SetPresence(host,Time.realtimeSinceStartupAsDouble,false,true); host.SetRunning(false);
+            var session = host.Runtime.Session; session.GrantDevelopmentGearKitAt(session.LastSettledTicks);
+            Button("Bank").onClick.Invoke(); yield return null;
+            var item = host.Model.Bank().First(i => session.BankItems[i.Id].StartsWith("[DEV]"));
+            var tile = root.GetComponentsInChildren<Button>().Single(b => b.name == "Bank item: " + item.Id);
+            Assert.That(tile.GetComponentsInChildren<Text>().Single(t => t.name == "Item name").text,Is.EqualTo(PlayerNames.Display(session.BankItems[item.Id])));
+            tile.onClick.Invoke(); yield return null;
+            Assert.That(root.GetComponentsInChildren<Text>().Any(t => t.text.Contains("[DEV]")),Is.False);
+            Assert.That(session.BankItems[item.Id],Does.StartWith("[DEV]"));
+            Assert.That(host.Runtime.Session,Is.SameAs(session)); Assert.That(session.Quantity(item.Id),Is.EqualTo(1));
         }
         [UnityTest]
         public IEnumerator BankTilesShowCatalogNamesAndRefreshQuantitiesWithoutResettingSession()
@@ -143,12 +193,12 @@ namespace Idlebound.Foundation.Tests
             host.Step(5); Button("Bank").onClick.Invoke(); yield return null;
             var tile = root.GetComponentsInChildren<Button>().Single(b => b.name == "Bank item: metal-1");
             var texts = tile.GetComponentsInChildren<Text>();
-            Assert.That(texts.Single(t => t.name == "Item name").text,Is.EqualTo(session.BankItems["metal-1"]));
+            Assert.That(texts.Single(t => t.name == "Item name").text,Is.EqualTo(PlayerNames.Display(session.BankItems["metal-1"])));
             Assert.That(texts.Single(t => t.name == "Quantity").text,Is.EqualTo("× 1"));
             host.Step(5); yield return new WaitForSecondsRealtime(.15f);
             Assert.That(texts.Single(t => t.name == "Quantity").text,Is.EqualTo("× 2"));
             tile.onClick.Invoke(); yield return null;
-            Assert.That(root.GetComponentsInChildren<Text>().Any(t => t.text == session.BankItems["metal-1"]),Is.True);
+            Assert.That(root.GetComponentsInChildren<Text>().Any(t => t.text == PlayerNames.Display(session.BankItems["metal-1"])),Is.True);
             Button("Close").onClick.Invoke(); yield return null;
             session.GrantDevelopmentGearKitAt(session.LastSettledTicks); yield return new WaitForSecondsRealtime(.15f);
             var longest = host.Model.Bank().OrderByDescending(i => i.Name.Length).First();
@@ -201,12 +251,11 @@ namespace Idlebound.Foundation.Tests
             Button("Activities").onClick.Invoke(); yield return null;
             Button("Skill: Mining — change").onClick.Invoke(); yield return null;
             Button("Smithing").onClick.Invoke(); yield return null;
-            Button("+ Bronze dagger").onClick.Invoke(); yield return null;
             var session = host.Runtime.Session;
             for (int i = 0; i < 2; i++)
             { root.GetComponentsInChildren<Button>().Single(b => b.name == "Activity header toggle").onClick.Invoke(); yield return null; }
             Assert.That(session.ProductionJobs,Is.Empty); Assert.That(session.Quantity("metal-1"),Is.EqualTo(2));
-            Button("Start one job").onClick.Invoke(); yield return null;
+            ActivityStart("bronze-dagger").onClick.Invoke(); yield return null;
             Assert.That(session.ProductionJobs.ContainsKey("character-1"),Is.True); Assert.That(session.Quantity("metal-1"),Is.Zero);
             for (int i = 0; i < 2; i++)
             { root.GetComponentsInChildren<Button>().Single(b => b.name == "Activity header toggle").onClick.Invoke(); yield return null; }

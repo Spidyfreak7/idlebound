@@ -25,7 +25,6 @@ namespace Idlebound.Foundation.Development
         private readonly List<Action> modalBindings = new List<Action>();
         private readonly List<Action> bankBindings = new List<Action>();
         private readonly List<GridLayoutGroup> grids = new List<GridLayoutGroup>();
-        private readonly HashSet<string> expanded = new HashSet<string>();
         private readonly Dictionary<MainScreen, Button> mainTabs = new Dictionary<MainScreen, Button>();
         private string signature;
         private Action refreshBank;
@@ -253,29 +252,38 @@ namespace Idlebound.Foundation.Development
                     foreach (var skill in Session.Skills)
                     { var key = skill.Id; Button(content,skill.DisplayName,() => { Model.ShowSkill(key); CloseModal(); Rebuild(true); }); }
                 }));
-            if (new[] { "melee","ranged","magic" }.Contains(Model.SkillFilter))
-                Label(body,"Style follows your mainhand (unarmed = Melee). Change weapons in Equipment. Combat data is development-only.",19,Muted);
             foreach (var item in Model.Activities())
             {
-                var a = item; var card = Card(body);
-                var row = Row(card,64); Icon(row,a.Id,50);
-                Button(row,(expanded.Contains(a.Id) ? "− " : "+ ") + a.Name, () => { if (!expanded.Add(a.Id)) expanded.Remove(a.Id); Rebuild(false); }, a.Assigned,64);
-                Bind(Label(card,"",19,a.Locked ? Bad : Muted), () =>
+                var a = item; var card = Card(body); card.name = "Activity card: " + a.Id;
+                card.GetComponent<VerticalLayoutGroup>().spacing = 6;
+                var row = Row(card,56); var group = row.GetComponent<HorizontalLayoutGroup>(); group.childForceExpandWidth = false;
+                Icon(row,a.Id,40);
+                var name = Label(row,a.Name,21,Gold); Size(name,56).flexibleWidth = 1;
+                var start = Button(row,a.Locked ? "Locked" : a.Occupant != null ? "Swap…" : "Start", () =>
                 {
-                    var v = Model.Activities().First(x => x.Id == a.Id);
-                    return v.Skill + " • Lv " + v.Level + " • " + (v.Locked ? "Locked" : v.Assigned ? "Assigned" : "Available") +
-                        (v.Occupant == null ? "" : " • " + Model.Character(v.Occupant).Name + " is working here");
-                });
-                if (!expanded.Contains(a.Id)) continue;
-                Bind(Label(card,"",20), () => Model.Activities().First(x => x.Id == a.Id).Description);
-                Label(card,GameUiModel.Seconds(a.Duration) + "s" + (a.Kind == "Combat" ? " per player attack" : " per action") + " • " + (a.Xp.HasValue ? a.Xp + " XP / action" : a.Kind == "Combat" ? "XP from actual damage" : "XP not configured"),19,Gold);
-                foreach (var input in a.Inputs)
-                { var stock = input; Bind(Label(card,"",20), () => stock.Name + " • needs " + stock.Required + " / bank " + Session.Quantity(stock.Id)); }
+                    if (a.Occupant == null) Act(() => Model.Start(a.Id));
+                    else Confirm("Swap Assignment", "Displace " + Model.Character(a.Occupant).Name + " from " + a.Name + "? They become unassigned. Unfinished production inputs are refunded; progress restarts.", () => Act(() => Model.Start(a.Id,true,a.Occupant)));
+                },false,56);
+                start.name = "Activity start: " + a.Id;
+                var startSize = Size(start,56); startSize.minWidth = startSize.preferredWidth = 100; startSize.flexibleWidth = 0;
+                start.GetComponentInChildren<Text>().fontSize = 20;
+                start.interactable = a.CanStart;
+                bindings.Add(() => { if (start != null) start.interactable = Model.Activities().First(x => x.Id == a.Id).CanStart; });
+                string requirement = "Lv " + a.Level;
+                if (a.Locked) requirement = a.Kind == "Combat"
+                    ? Session.Vitals[id].Hp <= 0 ? "No HP remaining" : "Equip a " + Session.Skills.First(k => k.Id == a.Skill).DisplayName + " weapon"
+                    : "Requires " + Session.Skills.First(k => k.Id == a.Skill).DisplayName + " Lv " + a.Level;
+                string xp = a.Xp.HasValue ? a.Xp + " XP" : a.Kind == "Combat" ? Session.Combat.Rules.XpPerDamage((CombatStyle)Enum.Parse(typeof(CombatStyle),a.Skill,true)) + " XP / damage" : "XP unavailable";
+                Label(card,requirement + " · " + xp + " · " + GameUiModel.Seconds(a.Duration) + "s" + (a.Kind == "Combat" ? " / attack" : ""),18,a.Locked ? Bad : Muted);
+                if (a.Inputs.Length > 0) Bind(Label(card,"",18), () => "Needs " + string.Join(" · ",a.Inputs.Select(stock =>
+                    stock.Required + " " + stock.Name + " (bank " + Session.Quantity(stock.Id) + ")")));
+                if (a.Occupant != null) Label(card,"Assigned to " + Model.Character(a.Occupant).Name,18,Muted);
                 if (a.Assigned)
                 {
                     BindProgress(Progress(card), () => Model.Character(id).Progress);
-                    if (a.Kind == "Production") Bind(Label(card,"",20,Gold), () => Session.ProductionJobs.ContainsKey(id) ? "Job running — ingredients reserved" : "Completed — start another job when ready");
-                    if (a.Kind == "Combat") CombatDetails(card,id,a.Id);
+                    if (a.Kind == "Production") Bind(Label(card,"",18,Gold), () => Session.ProductionJobs.ContainsKey(id)
+                        ? "Running · " + Model.Character(id).Progress.ToString("P0") : "Completed");
+                    if (a.Kind == "Combat") CombatDetails(card,id);
                     if (a.Kind != "Production" || Session.ProductionJobs.ContainsKey(id))
                     {
                         var controls = Row(card,48);
@@ -285,21 +293,13 @@ namespace Idlebound.Foundation.Development
                         cancel.GetComponent<Image>().color = Panel; cancel.GetComponentInChildren<Text>().color = Muted;
                     }
                 }
-                var start = Button(card,a.Occupant == null ? a.Kind == "Production" ? "Start one job" : "Start activity" : "Swap Assignment…", () =>
-                {
-                    if (a.Occupant == null) Act(() => Model.Start(a.Id));
-                    else Confirm("Swap Assignment", "Displace " + Model.Character(a.Occupant).Name + " from " + a.Name + "? They become unassigned. Unfinished production inputs are refunded; progress restarts.", () => Act(() => Model.Start(a.Id,true,a.Occupant)));
-                });
-                bindings.Add(() => { if (start != null) start.interactable = Model.Activities().First(x => x.Id == a.Id).CanStart; });
             }
         }
-        private void CombatDetails(Transform parent,string id,string monster)
+        private void CombatDetails(Transform parent,string id)
         {
-            Bind(Label(parent,"",21,Gold), () => Session.Encounters.TryGetValue(id,out var fight)
-                ? "HP " + Session.Vitals[id].Hp + " / " + Session.Vitals[id].MaxHp + " • enemy HP " + fight.EnemyHp +
-                    "\nNext hit " + GameUiModel.Seconds(fight.PlayerRemainingTicks) + "s • enemy attack " + GameUiModel.Seconds(fight.EnemyRemainingTicks) + "s"
-                : "Combat stopped • " + Status(Model.Character(id)));
-            Bind(Label(parent,"",19,Muted), () => "Defeats by this character: " + Session.KillsFor(id,monster) + " • " + SkillText(Model.Skills(id).First(s => s.Id == Model.SkillFilter)));
+            Bind(Label(parent,"",18,Muted), () => Session.Encounters.TryGetValue(id,out var fight)
+                ? "HP " + Session.Vitals[id].Hp + "/" + Session.Vitals[id].MaxHp + " · Enemy " + fight.EnemyHp + " HP"
+                : "Combat stopped");
         }
         private void Act(Func<bool> action)
         {
@@ -350,7 +350,7 @@ namespace Idlebound.Foundation.Development
                 string id = Model.InspectedId;
                 if (Session.Loadouts[id].Slots.TryGetValue(slot,out var current))
                 {
-                    Label(content,"Equipped: " + current.Definition.Name,22,Gold);
+                    Label(content,"Equipped: " + PlayerNames.Display(current.Definition.Name),22,Gold);
                     Label(content,Requirements(current.Definition),20,Muted); Label(content,"Instance " + current.InstanceId,17,Muted);
                     Button(content,"Inspect equipped item",() => ItemDetails(current.Definition.Id));
                     Button(content,"Unequip to bank",() => { CloseModal(); Act(() => Model.Unequip(slot)); });
@@ -360,12 +360,12 @@ namespace Idlebound.Foundation.Development
                 var stock = Model.CompatibleStock(slot);
                 if (stock.Length == 0) Label(content,"No compatible equipment in the shared bank. Gather and produce items, then return here.",21);
                 foreach (var item in stock)
-                { var key = item.Id; Button(content,item.Name + " × " + Session.Quantity(key),() => ItemDetails(key)); }
+                { var key = item.Id; Button(content,PlayerNames.Display(item.Name) + " × " + Session.Quantity(key),() => ItemDetails(key)); }
             });
         }
         private void ItemDetails(string id)
         {
-            Modal(Session.BankItems[id], content =>
+            Modal(PlayerNames.Display(Session.BankItems[id]), content =>
             {
                 Icon(content,id,80); var quantity = Label(content,"Shared bank: " + Session.Quantity(id),23,Gold);
                 modalBindings.Add(() => { if (quantity != null) quantity.text = "Shared bank: " + Session.Quantity(id); });
