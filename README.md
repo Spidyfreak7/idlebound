@@ -11,7 +11,7 @@ A 2D mobile-first idle RPG targeting Android and iOS, using Unity, C#, and a pla
 
 ## Open locally
 
-1. Clone `https://github.com/Spidyfreak7/idlebound.git` or update your existing checkout.
+1. Clone `https://github.com/Spidyfreak7/idlebound.git` or update your existing checkout. Fetch origin and switch to `develop` before development or Unity playtesting.
 2. In Unity Hub, choose Add project from disk and select the repository root containing `Assets`, `Packages`, and `ProjectSettings`.
 3. Open with **6000.3.26f1**. Allow Unity to resolve the committed package manifest/lockfile and import assets. Do not upgrade the editor or packages as part of verification.
 4. Open `Assets/Scenes/SampleScene.unity`. Check the Console for compilation/import errors, enter Play mode, and inspect the scene.
@@ -32,6 +32,10 @@ No Supabase setup is required to inspect the current template. Backend configura
 - `Docs/IdleboundMasterDesign.md`: reconciliation of four handoffs, status/conflict register, and preserved source tables.
 
 ## Git conventions and verification
+
+`develop` is the permanent working branch for all development stages, bug fixes, UI updates and improvements. Commit directly to `develop`; create a stage-specific branch only when explicitly requested. Leave `main` untouched until a version has been tested and approved. Existing review branches remain available as history.
+
+The branch was created from verified `origin/stage-8b-06-review` commit `0bd4601582102166bb5bba3bef4b40c63ebd8138`. In GitHub Desktop, choose **Fetch origin**, then **Current Branch → develop** (under remote branches if needed). Use **Pull origin** when updates are available. Keep this same branch selected for subsequent Unity playtesting. Preserve local changes when switching; do not discard them to change branches.
 
 Commit `Assets` together with their `.meta` files, `Packages`, and `ProjectSettings`. Preserve existing GUIDs. Visible Meta Files and text serialization are configured. `.gitignore` excludes generated Library, Temp, Obj, build, log, user-settings, and IDE outputs while retaining project source and metadata.
 
