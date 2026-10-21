@@ -1,0 +1,4 @@
+<linker>
+  <!-- DataContractJsonSerializer uses reflection; keep save DTOs on IL2CPP mobile builds. -->
+  <assembly fullname="Idlebound.Foundation" preserve="all" />
+</linker>

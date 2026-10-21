@@ -68,6 +68,7 @@ namespace Idlebound.Foundation
         public string Search { get; set; } = "";
         public BankFilter Filter { get; set; }
         public string Feedback { get; private set; } = "";
+        public event Action Changed;
         private sealed class BankReturnContext
         {
             internal string CharacterId, SkillId;
@@ -130,7 +131,7 @@ namespace Idlebound.Foundation
         }
         public bool MakeActive() => Result(Session.SelectAt(Session.LastSettledTicks, InspectedId), null, "Active character changed.");
         private bool Result(bool ok, string error, string success)
-        { Feedback = ok ? success : error ?? "Action unavailable."; return ok; }
+        { Feedback = ok ? success : error ?? "Action unavailable."; if (ok) Changed?.Invoke(); return ok; }
         public CharacterView Character(string id)
         {
             var c = Session.Characters.First(x => x.Id == id);

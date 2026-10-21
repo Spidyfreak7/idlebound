@@ -12,15 +12,15 @@ namespace Idlebound.Foundation
         private double previousTime;
         private long previousWallTicks;
         private bool away;
-        public GatheringSession Session { get; }
+        public GatheringSession Session { get; private set; }
         public bool Running { get; private set; } = true;
         public bool IsAway => away;
 
-        public SessionRuntime(GatheringSession session, object clockOwner, double now = 0)
+        public SessionRuntime(GatheringSession session, object clockOwner, double now = 0, bool initiallyAway = false)
         {
             Session = session ?? throw new ArgumentNullException(nameof(session));
             this.clockOwner = clockOwner ?? throw new ArgumentNullException(nameof(clockOwner));
-            ValidateTime(now); previousTime = now; previousWallTicks = WallTicks(now);
+            ValidateTime(now); previousTime = now; previousWallTicks = WallTicks(now); away = initiallyAway;
             if (Owners.TryGetValue(session, out _)) throw new InvalidOperationException("This session already has a clock owner.");
             Owners.Add(session, this);
         }
@@ -67,6 +67,15 @@ namespace Idlebound.Foundation
             if (away) throw new InvalidOperationException("Change the development clock while present.");
             Consume(now, false);
             Running = value;
+        }
+        // A validated disk transaction has already settled offline time. Rebase without replay.
+        public void AdoptRestored(object caller, GatheringSession restored, double now, bool absent)
+        {
+            Check(caller,now);
+            if (restored == null || ReferenceEquals(restored,Session) || Owners.TryGetValue(restored,out _))
+                throw new InvalidOperationException("Adopt a new, unowned restored session.");
+            Owners.Remove(Session); Owners.Add(restored,this); Session = restored;
+            previousTime = now; previousWallTicks = WallTicks(now); away = absent;
         }
         public void Step(object caller, long ticks, bool offline = false)
         {

@@ -99,7 +99,7 @@ namespace Idlebound.Foundation
             public Dictionary<string, long> Kills;
         }
 
-        private CombatBatch PlanCombat(long eligibleTicks, bool offline, Dictionary<string, long> nextInventory)
+        private CombatBatch PlanCombat(long eligibleTicks, bool offline, Dictionary<string, long> nextInventory, OfflineReport receipt)
         {
             var batch = new CombatBatch { Kills = new Dictionary<string, long>(killCounts) };
             long events = 0;
@@ -147,7 +147,10 @@ namespace Idlebound.Foundation
                                     granted = roll < drop.Chance;
                                 }
                                 if (granted)
+                                {
                                     nextInventory[drop.ItemId] = checked((nextInventory.TryGetValue(drop.ItemId, out var banked) ? banked : 0) + drop.Quantity);
+                                    receipt?.For(id,monster.Id).Item(drop.ItemId,drop.Quantity);
+                                }
                             }
                             // No travel delay or free immediate hit: both clocks restart for the new enemy.
                             fight.EnemyHp = monster.MaxHp;
@@ -164,6 +167,11 @@ namespace Idlebound.Foundation
                 }
                 var skill = Characters.First(c => c.Id == id).Skills.First(s => s.SkillId == skillId);
                 curve.ApplyAward(skill.StoredXp, xp); // Preflight XP before any bank/HP/counter changes.
+                if (receipt != null)
+                {
+                    var outcome = receipt.For(id,monster.Id); outcome.Award(skillId,curve.ApplyAward(skill.StoredXp,xp) - skill.StoredXp);
+                    if (hp.Hp == 0) outcome.StopReason = "Defeated";
+                }
                 batch.Plans.Add(new CombatPlan { CharacterId = id, Vitals = hp, Fight = fight, Skill = skill, Xp = xp });
             }
             return batch;

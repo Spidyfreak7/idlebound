@@ -129,6 +129,7 @@ namespace Idlebound.Foundation
     public sealed class SeededLootRoller : IDeterministicLootRoller
     {
         private readonly ulong seed;
+        public ulong Seed => seed;
         public SeededLootRoller(ulong seed) { this.seed = seed; }
         public decimal Roll(string characterId, string monsterId, long killIndex, string dropId)
         {

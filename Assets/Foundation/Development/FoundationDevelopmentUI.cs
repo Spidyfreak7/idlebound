@@ -8,7 +8,7 @@ namespace Idlebound.Foundation.Development
     public sealed class FoundationDevelopmentUI : MonoBehaviour
     {
         private GameSessionHost host;
-        private GatheringSession session => host != null ? host.Runtime.Session : null;
+        private GatheringSession session => host != null && host.Runtime != null ? host.Runtime.Session : null;
         private Vector2 scroll;
         private string inspected = "character-1";
         private string skillFilter = "mining";
@@ -27,7 +27,12 @@ namespace Idlebound.Foundation.Development
 
         private void OnGUI()
         {
-            if (session == null) return;
+            if (session == null || host.IsLoading || host.PersistenceError != null)
+            {
+                GUILayout.Label(host.PersistenceError ?? "Loading local session…");
+                if (host.PersistenceError != null && GUILayout.Button("Retry local save")) host.RetryPersistence();
+                return;
+            }
             var previousMatrix = GUI.matrix;
             bool previousEnabled = GUI.enabled;
             var safe = Screen.safeArea;
@@ -42,7 +47,7 @@ namespace Idlebound.Foundation.Development
                 GUILayout.BeginArea(new Rect(16, 12, 688, safe.height / scale - 24));
                 scroll = GUILayout.BeginScrollView(scroll);
                 GUILayout.Label("IDLEBOUND — Development mode (8B-05)", title);
-                GUILayout.Label("In-memory development state • no save/cloud", label);
+                GUILayout.Label(host.UsesLocalSave ? "Local player save active • no cloud" : "Development sandbox • not written over player save", label);
                 GUILayout.Label(session.UsesDevelopmentXp
                     ? "DEVELOPMENT XP FIXTURE: 100000/cycle. Level is a known milestone floor only."
                     : "LIVE XP: approved gathering rewards • full reconstructed level curve • XP capped at 10M.", label);

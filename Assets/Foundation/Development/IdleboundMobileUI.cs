@@ -38,10 +38,13 @@ namespace Idlebound.Foundation.Development
         private RectTransform equipmentPanel, equipmentHero;
         private readonly Dictionary<EquipmentSlot, RectTransform> equipmentButtons = new Dictionary<EquipmentSlot, RectTransform>();
         private float equipmentWidth = -1;
+        private string systemPanel;
         private void Awake()
         {
             host = GameSessionHost.Ensure(gameObject);
-            BuildCanvas(); Rebuild(true);
+            BuildCanvas();
+            if (host.Runtime != null) Rebuild(true);
+            else { activityHeader.gameObject.SetActive(false); characterTabs.gameObject.SetActive(false); }
         }
         private void BuildCanvas()
         {
@@ -111,6 +114,20 @@ namespace Idlebound.Foundation.Development
         private void Update()
         {
             if (host == null || body == null) return;
+            if (host.IsLoading || host.PersistenceError != null || host.Runtime == null)
+            {
+                string state = host.PersistenceError != null ? "error" : "loading";
+                if (systemPanel != state)
+                {
+                    Modal(state == "error" ? "Local save needs attention" : "Preparing your adventurers",content =>
+                    {
+                        Label(content,host.PersistenceError ?? "Restoring your game and offline progress…",21);
+                        if (state == "error") Button(content,"Retry",host.RetryPersistence);
+                    },false); systemPanel = state;
+                }
+                return;
+            }
+            if (systemPanel == "loading" || systemPanel == "error") { CloseModal(); systemPanel = null; Rebuild(true); }
             if (lastSafe != Screen.safeArea || lastScreen != new Vector2(Screen.width,Screen.height)) ApplySafeArea();
             ApplyEquipmentLayout();
             foreach (var grid in grids)
@@ -123,10 +140,12 @@ namespace Idlebound.Foundation.Development
             string next = Structure();
             if (next != signature)
             {
-                if (generation != host.Generation) { CloseModal(); Rebuild(true); }
+                if (generation != host.Generation) { CloseModal(); systemPanel = null; Rebuild(true); }
                 else if (Model.Screen == MainScreen.Bank && !Model.CharacterOpen) { refreshBank?.Invoke(); signature = next; }
                 else Rebuild(false);
             }
+            var pending = host.PendingReport;
+            if (pending != null && systemPanel != pending.Id) ShowWelcome(pending);
             foreach (var action in bindings) action();
             foreach (var action in bankBindings) action();
             foreach (var action in modalBindings) action();
@@ -303,6 +322,7 @@ namespace Idlebound.Foundation.Development
         }
         private void Act(Func<bool> action)
         {
+            if (host.IsLoading || host.PersistenceError != null) return;
             try { action(); localNotice = ""; }
             catch (Exception error) { localNotice = error.Message; }
             Rebuild(false);
@@ -464,20 +484,47 @@ namespace Idlebound.Foundation.Development
         }
         private void Confirm(string title,string message,Action accept)
         { Modal(title,content => { Label(content,message,22); Button(content,"Confirm Swap Assignment",() => { CloseModal(); accept(); }); }); }
-        private void Modal(string title,Action<RectTransform> build)
+        private void Modal(string title,Action<RectTransform> build,bool dismissible = true)
         {
             modalBindings.Clear(); Clear(modalLayer); modalLayer.gameObject.SetActive(true);
             var shade = SurfaceOnce(modalLayer,new Color(0,0,0,.88f)); shade.raycastTarget = true;
             var panel = Column(modalLayer,"Details",18); panel.anchorMin = new Vector2(.06f,.08f); panel.anchorMax = new Vector2(.94f,.92f); panel.offsetMin = panel.offsetMax = Vector2.zero; Surface(panel,Panel);
-            Label(panel,title,26,Gold,70); Button(panel,"Close",CloseModal,false,58);
+            Label(panel,title,26,Gold,70); if (dismissible) Button(panel,"Close",CloseModal,false,58);
             var area = Node("Details scroll",panel); Size(area,0,1); var sr = area.gameObject.AddComponent<ScrollRect>(); sr.horizontal = false;
             var viewport = Node("Viewport",area); Fill(viewport); viewport.gameObject.AddComponent<RectMask2D>(); Surface(viewport,Panel).raycastTarget = true;
             var content = Column(viewport); content.anchorMin = new Vector2(0,1); content.anchorMax = Vector2.one; content.pivot = new Vector2(.5f,1); content.offsetMin = content.offsetMax = Vector2.zero;
             content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             sr.viewport = viewport; sr.content = content; build(content);
         }
+        private static string AwayTime(long ticks)
+        {
+            var time = TimeSpan.FromTicks(ticks);
+            return time.TotalHours >= 1 ? ((long)time.TotalHours) + "h " + time.Minutes + "m" : ((long)time.TotalMinutes) + "m " + time.Seconds + "s";
+        }
+        private void ShowWelcome(OfflineReport report)
+        {
+            systemPanel = report.Id;
+            Modal("WELCOME BACK!",content =>
+            {
+                Label(content,(report.Intervals > 1 ? "Away across " + report.Intervals + " visits: " : "Away: ") + AwayTime(report.AwayTicks) + "\nOffline progress: " + AwayTime(report.EligibleTicks),22,Gold);
+                if (report.Capped) Label(content,"Offline limit reached · 4h maximum per absence",18,Muted);
+                foreach (var c in report.Characters)
+                {
+                    var card = Card(content);
+                    string character = Session.Characters.First(x => x.Id == c.Character).DisplayName;
+                    string activity = c.Activity == null ? "Unassigned" : PlayerNames.Display(Session.Activities.First(a => a.Id == c.Activity).DisplayName);
+                    Label(card,character + " — " + activity,21,Gold);
+                    foreach (var item in c.Items) Label(card,"+" + item.Quantity + " " + PlayerNames.Display(Session.BankItems[item.Id]),20);
+                    foreach (var xp in c.Xp) Label(card,"+" + xp.Quantity.ToString("0.##") + " " + Session.Skills.First(k => k.Id == xp.Skill).DisplayName + " XP",19);
+                    if (c.Xp.Count == 0) Label(card,"0 XP",18,Muted);
+                    if (c.Items.Count == 0 && c.Xp.Count == 0) Label(card,"No rewards earned",18,Muted);
+                    if (c.StopReason != null) Label(card,c.StopReason == "Defeated" ? "Combat stopped: defeated" : c.StopReason,19,Muted);
+                }
+                Button(content,"Continue",() => { if (host.AcknowledgeWelcome(report.Id)) { CloseModal(); systemPanel = null; } });
+            },false);
+        }
         private static Image SurfaceOnce(RectTransform rect,Color color)
         { var image = rect.GetComponent<Image>(); if (image == null) image = rect.gameObject.AddComponent<Image>(); image.color = color; return image; }
-        private void CloseModal() { modalBindings.Clear(); modalLayer.gameObject.SetActive(false); Clear(modalLayer); }
+        private void CloseModal() { systemPanel = null; modalBindings.Clear(); modalLayer.gameObject.SetActive(false); Clear(modalLayer); }
     }
 }

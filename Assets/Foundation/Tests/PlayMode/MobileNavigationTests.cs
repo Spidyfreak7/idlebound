@@ -11,6 +11,7 @@ namespace Idlebound.Foundation.Tests
     public sealed class MobileNavigationTests
     {
         private GameObject root;
+        private System.IDisposable isolation;
         private Button Button(string text) => root.GetComponentsInChildren<Button>(true).First(b =>
             b.gameObject.activeInHierarchy && b.GetComponentInChildren<Text>() != null && b.GetComponentInChildren<Text>().text == text);
         private Button ActivityStart(string id) => root.GetComponentsInChildren<Button>().Single(b => b.name == "Activity start: " + id);
@@ -18,10 +19,11 @@ namespace Idlebound.Foundation.Tests
         public IEnumerator Open()
         {
             Assert.That(GameSessionHost.Instance,Is.Null,"Run PlayMode tests in the Test Runner's isolated test scene.");
+            isolation = GameSessionHost.IsolateForTests();
             root = new GameObject("Mobile UI test"); root.AddComponent<IdleboundMobileUI>(); yield return null;
         }
         [UnityTearDown]
-        public IEnumerator Close() { Object.Destroy(root); yield return null; }
+        public IEnumerator Close() { Object.Destroy(root); yield return null; isolation?.Dispose(); }
         [UnityTest]
         public IEnumerator CanvasAndSafeAreaInitializeWithOneClockHost()
         {

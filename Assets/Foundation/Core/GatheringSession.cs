@@ -6,11 +6,11 @@ using System.Linq;
 namespace Idlebound.Foundation
 {
     // Single owner of assignment/selection/effect mutation and time settlement.
-    // In-memory only: no persistence, wall-clock authority, or production offline replay.
+    // Persistence snapshots and offline receipts extend this same authoritative state.
     public sealed partial class GatheringSession
     {
         public const long BaseOfflineTicks = 4L * TimeSpan.TicksPerHour;
-        private readonly GameState state;
+        private GameState state;
         private readonly XpCurve curve;
         private readonly Dictionary<string, long> inventory = new Dictionary<string, long>();
         private readonly Dictionary<string, long> partialTicks = new Dictionary<string, long>();
@@ -70,6 +70,8 @@ namespace Idlebound.Foundation
             Inventory = new ReadOnlyDictionary<string, long>(inventory);
         }
 
+        public OfflineReport LastOfflineReport { get; private set; }
+
         public long Quantity(string resourceId) => inventory.TryGetValue(resourceId, out var count) ? count : 0;
         public long PartialTicks(string characterId) => partialTicks.TryGetValue(characterId, out var ticks) ? ticks : 0;
         public long CompletedCycles(string characterId) => completedCycles.TryGetValue(characterId, out var count) ? count : 0;
@@ -100,6 +102,8 @@ namespace Idlebound.Foundation
             long elapsed = absoluteTicks - LastSettledTicks;
             if (elapsed == 0) return;
             long eligible = offline ? Math.Min(elapsed, BaseOfflineTicks) : elapsed;
+            var receipt = offline ? new OfflineReport { AwayTicks = elapsed, EligibleTicks = eligible, Capped = elapsed > eligible } : null;
+            if (receipt != null) foreach (var c in Characters) receipt.For(c.Id,Assignments.TryGetValue(c.Id,out var target) ? target : null);
             var plans = new List<Settlement>();
             var nextInventory = new Dictionary<string, long>(inventory);
             // Preflight all rewards before mutating anything; checked overflow cannot partly pay a batch.
@@ -125,10 +129,17 @@ namespace Idlebound.Foundation
                     long before = nextInventory.TryGetValue(activity.ResourceId, out var count) ? count : 0;
                     nextInventory[activity.ResourceId] = checked(before + checked(cycles * (recipe?.OutputQuantity ?? 1)));
                 }
+                if (receipt != null)
+                {
+                    var outcome = receipt.For(assignment.Key,assignment.Value);
+                    outcome.Item(activity.ResourceId,checked(cycles * (recipe?.OutputQuantity ?? 1)));
+                    outcome.Award(activity.SkillId,nextXp - skill.StoredXp);
+                    if (recipe != null && cycles == 1) outcome.StopReason = "Job completed";
+                }
                 plans.Add(new Settlement { CharacterId = assignment.Key, Skill = skill,
                     Remaining = remainder, TotalCycles = totalCycles, Xp = xp, FinishedProduction = recipe != null && cycles == 1 });
             }
-            var combatBatch = PlanCombat(eligible, offline, nextInventory);
+            var combatBatch = PlanCombat(eligible, offline, nextInventory, receipt);
             inventory.Clear();
             foreach (var pair in nextInventory) inventory.Add(pair.Key, pair.Value);
             foreach (var plan in plans)
@@ -141,6 +152,7 @@ namespace Idlebound.Foundation
             CommitCombat(combatBatch);
             // Advance across ineligible offline excess too, so a repeated call cannot reclaim it.
             LastSettledTicks = absoluteTicks;
+            LastOfflineReport = receipt;
         }
 
         public bool SelectAt(long ticks, string characterId)
