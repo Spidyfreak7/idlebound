@@ -328,5 +328,52 @@ namespace Idlebound.Foundation.Tests
             Assert.That(GameSessionHost.Instance.Model.CharacterOpen,Is.False);
             Assert.That(root.GetComponentsInChildren<Text>().Any(t => t.text == "YOUR ACTIVE ADVENTURER"),Is.True);
         }
+
+        [UnityTest] public IEnumerator MagicOffers48LockedEnchantmentsAndTierFilterWithoutChangingSession()
+        {
+            var host=GameSessionHost.Instance;host.SetRunning(false);var session=host.Runtime.Session;
+            Button("Inspect Character 1").onClick.Invoke();yield return null;host.Model.ShowSkill("magic");Button("Activities").onClick.Invoke();yield return null;
+            Assert.That(root.GetComponentsInChildren<Transform>().Any(t=>t.name=="Enchant activity"),Is.True);
+            Button("Choose enchantment").onClick.Invoke();yield return null;
+            Assert.That(root.GetComponentsInChildren<Button>().Count(b=>b.GetComponentInChildren<Text>()?.text=="Locked" && b.transform.IsChildOf(root.GetComponentsInChildren<Transform>().Single(t=>t.name=="Details"))),Is.EqualTo(48));
+            Button("Tier: All — next").onClick.Invoke();yield return null;
+            Assert.That(root.GetComponentsInChildren<Button>().Count(b=>b.GetComponentInChildren<Text>()?.text=="Locked" && b.transform.IsChildOf(root.GetComponentsInChildren<Transform>().Single(t=>t.name=="Details"))),Is.EqualTo(12));
+            Button("Close").onClick.Invoke();yield return null;Button("Bank").onClick.Invoke();yield return null;Button("Back to Character").onClick.Invoke();yield return null;
+            Assert.That(host.Runtime.Session,Is.SameAs(session));Assert.That(session.ActiveCharacterId,Is.EqualTo("character-1"));Assert.That(session.Assignments,Is.Empty);
+        }
+        [UnityTest] public IEnumerator PermanentEnchantConfirmationProgressBankReturnAndItemDetailsUseRealInstance()
+        {
+            var host=GameSessionHost.Instance;host.SetRunning(false);var old=host.Runtime.Session;var d=old.Capture();
+            d.Bank=new[]{new ItemAmount{Id="metal-1",Quantity=40},new ItemAmount{Id="wood-1",Quantity=20},new ItemAmount{Id="bronze-dagger-item",Quantity=1}};
+            var magic=d.Characters[0].Skills.Single(k=>k.Id=="magic");magic.Level=15;magic.Xp=old.Curve.Thresholds[15];
+            host.Runtime.AdoptRestored(host,GatheringSession.Restore(d,old),Time.realtimeSinceStartupAsDouble,false);
+            Button("Inspect Character 1").onClick.Invoke();yield return null;host.Model.ShowSkill("magic");Button("Activities").onClick.Invoke();yield return null;
+            Button("Choose enchantment").onClick.Invoke();yield return null;Button("Choose bank equipment").onClick.Invoke();yield return null;
+            var target=root.GetComponentsInChildren<Button>().Single(b=>b.GetComponentInChildren<Text>()?.text.EndsWith("new instance from bank")==true);target.onClick.Invoke();yield return null;
+            Assert.That(host.Runtime.Session.EnchantJobs,Is.Empty,"Choosing a target must not start without permanent confirmation.");
+            Button("Confirm permanent enchantment").onClick.Invoke();yield return null;
+            var session=host.Runtime.Session;string instance=session.EnchantJobs["character-1"].InstanceId;host.Step(15);yield return null;
+            Button("Bank").onClick.Invoke();yield return null;Button("Back to Character").onClick.Invoke();yield return null;
+            Assert.That(session.PartialTicks("character-1"),Is.EqualTo(15*System.TimeSpan.TicksPerSecond));
+            Button("Cancel enchant");host.Step(15);yield return new WaitForSecondsRealtime(.15f);
+            Assert.That(session.EnchantJobs,Is.Empty);Assert.That(session.BankEquipmentInstances[instance].PermanentEnchantmentId,Is.EqualTo("miningspeed-1"));
+            Button("Bank").onClick.Invoke();yield return null;
+            root.GetComponentsInChildren<Button>().Single(b=>b.name=="Bank item: bronze-dagger-item").onClick.Invoke();yield return null;
+            Assert.That(root.GetComponentsInChildren<Text>().Any(t=>t.text.Contains("Mining Speed I") && t.text.Contains("permanent")),Is.True);
+            Assert.That(session.ActiveCharacterId,Is.EqualTo("character-1"));Assert.That(session.Quantity("bronze-dagger-item"),Is.EqualTo(1));
+        }
+        [UnityTest] public IEnumerator EquipmentShowsLiveSetBackgroundEfficiencyAndOfflineAllowance()
+        {
+            var host=GameSessionHost.Instance;host.SetRunning(false);var session=host.Runtime.Session;session.GrantDevelopmentGearKitAt(session.LastSettledTicks);
+            foreach(string id in new[]{"dev-practice-hood","dev-practice-body","dev-practice-legs","dev-practice-boots"})
+            {
+                var key=session.MaterializeBankEquipmentAt(session.LastSettledTicks,id);var d=session.Capture();d.Equipment.Single(e=>e.Instance==key).Enchantment="backgroundxp-4";
+                session=GatheringSession.Restore(d,session);Assert.That(session.EquipAt(session.LastSettledTicks,"character-1",id,session.Equipment.Definitions.Single(e=>e.Id==id).Slot,out _,key),Is.True);
+            }
+            host.Runtime.AdoptRestored(host,session,Time.realtimeSinceStartupAsDouble,false);
+            Button("Inspect Character 1").onClick.Invoke();yield return null;Button("Equipment").onClick.Invoke();yield return null;
+            Assert.That(root.GetComponentsInChildren<Text>().Any(t=>t.text.Contains("Matching four-piece set: active") && t.text.Contains("50.0") && t.text.Contains("4h")),Is.True);
+            Assert.That(session.HasMatchingSet("character-1"),Is.True);
+        }
     }
 }
