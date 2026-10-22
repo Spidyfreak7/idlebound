@@ -13,6 +13,10 @@ This register reconciles all four uploaded handoffs, read completely for Stage 8
 
 Original PDFs/workbook were not supplied here. S2's positive tables supply values that S1/S3/S4 say were unavailable; those absence statements are not explicit rejections of S2. Every source table is preserved verbatim in the archival annex below. Status words inside those excerpts retain the source author's claim and do not override this reconciliation.
 
+## Stage 8B-08 — later explicit food authority
+
+The user's Stage 8B-08 handoff approves shared-bank food consumption and independent default-ON auto-eating (50%, configurable 10–90 by tens, Auto/shrimp/sardine preference). Cooked shrimp 8 HP and sardine 12 HP are **new provisional playtest values**, referencing existing Cooking outputs. Eating grants no XP, cannot revive and cannot borrow future Cooking outputs. Actual food use is separate from offline rewards. Earlier archived food/recovery gaps below are historical; final death recovery remains unresolved. `Stage8B08Verification.md` records the minimal-overheal Auto interpretation, deterministic ties, v3 migration, verification and deferred systems. No other recipes/combat/enchant balance changes are approved by this update.
+
 ## Stage 8B-07 — later explicit authority
 
 The user's Stage 8B-07 handoff supersedes older enchant unlock schedules and unresolved family/stacking/cost claims below. It approves twelve named types, four tiers, 48 individually staggered Magic unlocks, permanent nonreplaceable enchantments on all ten slots, named-skill effects, equipped-only sources, 50% background XP cap and per-character 4–7h offline limits. Exact current tables and provenance are in `Stage8B07BalanceDecisions.md` and the two enchantment CSVs. Earlier source tables remain unchanged as historical records. I–III potency, the 25% exact-tier four-piece bonus, shared material/time/XP test balance and source-gated regeneration remain explicitly provisional as documented there. This does not approve boss effects, gems, new equipment recipes, cloud saves or monetization.
