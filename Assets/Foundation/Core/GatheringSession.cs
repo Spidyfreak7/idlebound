@@ -29,7 +29,7 @@ namespace Idlebound.Foundation
         public bool RefundCancelledInputs { get; }
 
         public GatheringSession(GatheringCatalog catalog, XpCurve curve, ProductionCatalog production = null, bool? refundCancelledInputs = null,
-            EquipmentCatalog equipment = null, CombatCatalog combat = null, IDeterministicLootRoller random = null)
+            EquipmentCatalog equipment = null, CombatCatalog combat = null, IDeterministicLootRoller random = null, EnchantmentCatalog enchantments = null)
         {
             Catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             this.curve = curve ?? throw new ArgumentNullException(nameof(curve));
@@ -44,6 +44,7 @@ namespace Idlebound.Foundation
                 Production.Recipes.Any(r => catalog.Resources.Any(raw => raw.Id == r.OutputId)))
                 throw new ArgumentException("Production catalog does not match session resource definitions.");
             Equipment = equipment ?? EquipmentCatalog.Empty;
+            Enchantments = enchantments ?? EnchantmentCatalog.Empty;
             Combat = combat ?? CombatCatalog.Empty;
             lootRoller = random ?? new SeededLootRoller(804);
             if (Production.Recipes.Any(recipe => recipe.Inputs.Keys.Any(id => Equipment.Definitions.Any(d => d.Id == id))))
@@ -54,7 +55,7 @@ namespace Idlebound.Foundation
             BankItems = new ReadOnlyDictionary<string, string>(names);
             ProductionJobs = new ReadOnlyDictionary<string, ProductionRecipe>(productionJobs);
             state = new GameState(new RosterAccess(), SkillCatalog.Create(),
-                catalog.Activities.Concat(Production.Recipes.Select(r => r.Activity())).Concat(Combat.Monsters.Select(m => m.Activity())));
+                catalog.Activities.Concat(Production.Recipes.Select(r => r.Activity())).Concat(Combat.Monsters.Select(m => m.Activity())).Concat(Enchantments.Definitions.Select(e=>e.Activity())));
             for (int i = 1; i <= RosterAccess.InitialAvailableSlots; i++)
                 state.TryAddCharacter(new CharacterState("character-" + i, "Character " + i,
                     state.Skills.Select(s => new SkillState(s.Id, 1, 0))));
@@ -84,11 +85,12 @@ namespace Idlebound.Foundation
             XpPolicy.Efficiency(false, true, skillId, EffectsFor(characterId));
 
         private IEnumerable<BackgroundXpEffect> EffectsFor(string id) =>
-            effects.TryGetValue(id, out var list) ? list : Array.Empty<BackgroundXpEffect>();
+            (effects.TryGetValue(id, out var list) ? list : Array.Empty<BackgroundXpEffect>()).Concat(Bonus(id,EnchantmentType.BackgroundXp)>0 ? new[]{new BackgroundXpEffect("equipment-enchantments","*",Bonus(id,EnchantmentType.BackgroundXp))} : Array.Empty<BackgroundXpEffect>());
 
         private sealed class Settlement
         {
             public string CharacterId;
+            public long Limit, Duration;
             public SkillState Skill;
             public long Remaining;
             public long TotalCycles;
@@ -103,12 +105,13 @@ namespace Idlebound.Foundation
             if (absoluteTicks < LastSettledTicks) throw new ArgumentOutOfRangeException(nameof(absoluteTicks), "Clock rewind rejected.");
             long elapsed = absoluteTicks - LastSettledTicks;
             if (elapsed == 0) return;
-            long eligible = offline ? Math.Min(elapsed, BaseOfflineTicks) : elapsed;
+            long eligible = offline ? Math.Min(elapsed, Characters.Max(c=>OfflineAllowance(c.Id))) : elapsed;
             var receipt = offline ? new OfflineReport { AwayTicks = elapsed, EligibleTicks = eligible, Capped = elapsed > eligible } : null;
             if (receipt != null) foreach (var c in Characters) receipt.For(c.Id,Assignments.TryGetValue(c.Id,out var target) ? target : null);
             var nextInventory = new Dictionary<string, long>(inventory);
-            var plans = PlanActivities(eligible,offline,nextInventory,receipt);
-            var combatBatch = PlanCombat(eligible, offline, nextInventory, receipt);
+            var enchantPlans=PlanEnchants(elapsed,offline,receipt);
+            var plans = PlanActivities(elapsed,offline,nextInventory,receipt);
+            var combatBatch = PlanCombat(elapsed, offline, nextInventory, receipt);
             inventory.Clear();
             foreach (var pair in nextInventory) inventory.Add(pair.Key, pair.Value);
             foreach (var plan in plans)
@@ -119,6 +122,7 @@ namespace Idlebound.Foundation
                 if (plan.StoppedProduction) productionJobs.Remove(plan.CharacterId);
             }
             CommitCombat(combatBatch);
+            CommitEnchants(enchantPlans);
             // Advance across ineligible offline excess too, so a repeated call cannot reclaim it.
             LastSettledTicks = absoluteTicks;
             LastOfflineReport = receipt;
@@ -135,6 +139,7 @@ namespace Idlebound.Foundation
             SettleTo(ticks);
             if (Combat.Monsters.Any(m => m.Id == activityId))
             { error = "Use StartCombatAt so encounter state is initialized."; return false; }
+            if (Enchantments.Definitions.Any(e=>e.Id==activityId)) { error="Use StartEnchantAt to reserve materials and target.";return false; }
             if (Production.Recipes.Any(r => r.Id == activityId))
             { error = "Use StartProductionAt so ingredients are consumed."; return false; }
             if (!TryPlanChange(characterId, activityId, swap, out var cancelled, out error)) return false;
@@ -160,6 +165,7 @@ namespace Idlebound.Foundation
                 ReplaceInventory(refundedInventory);
                 partialTicks.Remove(characterId);
                 productionJobs.Remove(characterId);
+                enchantJobs.Remove(characterId);
                 encounters.Remove(characterId);
             }
             return removed;
@@ -169,6 +175,7 @@ namespace Idlebound.Foundation
         {
             if (!Characters.Any(c => c.Id == characterId)) throw new ArgumentException("Unknown character.");
             var copy = applicableEffects?.ToArray() ?? throw new ArgumentNullException(nameof(applicableEffects));
+            if(copy.Any(e=>e!=null && e.SourceId=="equipment-enchantments"))throw new ArgumentException("Equipment effect source is reserved for derived enchantments.");
             // Validate source identity and scope before changing time or effects.
             XpPolicy.Efficiency(false, true, "*", copy);
             if (copy.Any(e => e.SkillId != "*" && !Skills.Any(s => s.Id == e.SkillId)))

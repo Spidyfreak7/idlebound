@@ -44,6 +44,8 @@ namespace Idlebound.Foundation
     {
         private readonly Dictionary<string, CharacterVitals> vitals = new Dictionary<string, CharacterVitals>();
         private readonly Dictionary<string, CombatEncounter> encounters = new Dictionary<string, CombatEncounter>();
+        private readonly Dictionary<string,long> attackCounts=new Dictionary<string,long>();
+        private readonly Dictionary<string,long> regenTicks=new Dictionary<string,long>();
         private readonly Dictionary<string, long> killCounts = new Dictionary<string, long>();
         private readonly IDeterministicLootRoller lootRoller;
         public CombatCatalog Combat { get; }
@@ -92,6 +94,7 @@ namespace Idlebound.Foundation
             public CombatEncounter Fight;
             public SkillState Skill;
             public decimal Xp;
+            public long Attacks, Regen;
         }
         private sealed class CombatBatch
         {
@@ -113,22 +116,30 @@ namespace Idlebound.Foundation
                 string skillId = profile.Style.ToString().ToLowerInvariant();
                 decimal rate = XpPolicy.Efficiency(IsActive(id), offline, skillId, EffectsFor(id));
                 decimal xp = 0;
-                long remaining = eligibleTicks;
+                long remaining = Eligible(id,eligibleTicks,offline);
+                long attacks=attackCounts.TryGetValue(id,out var attacksBefore)?attacksBefore:0;
+                long regen=regenTicks.TryGetValue(id,out var regenBefore)?regenBefore:0;
+                decimal regenBonus=Bonus(id,EnchantmentType.HpRegeneration);
                 while (remaining > 0 && hp.Hp > 0)
                 {
                     long next = Math.Min(fight.PlayerRemainingTicks, fight.EnemyRemainingTicks);
+                    if(regenBonus>0) next=Math.Min(next,Enchantments.RegenInterval-regen);
                     if (next > remaining)
                     {
                         fight.PlayerRemainingTicks -= remaining; fight.EnemyRemainingTicks -= remaining;
+                        if(regenBonus>0)regen+=remaining;
                         break;
                     }
                     remaining -= next;
+                    if(regenBonus>0)regen+=next;
                     fight.PlayerRemainingTicks -= next; fight.EnemyRemainingTicks -= next;
                     if (++events > Combat.Rules.EventBudget) throw new InvalidOperationException("Development combat event budget exceeded. Settle smaller time chunks; no state was committed.");
                     // Deterministic tie policy: player first; a defeated monster cannot retaliate.
                     if (fight.PlayerRemainingTicks == 0)
                     {
-                        decimal actual = CombatMath.ActualDamage(checked(profile.Damage * CombatMath.Triangle(profile.Style, monster.Style)), fight.EnemyHp);
+                        attacks=checked(attacks+1);
+                        bool critical=profile.CriticalChance>0 && new SeededLootRoller((lootRoller as SeededLootRoller)?.Seed ?? 804).Roll(id,"critical",attacks,"attack")<profile.CriticalChance;
+                        decimal actual = CombatMath.ActualDamage(checked(profile.Damage * CombatMath.Triangle(profile.Style, monster.Style)*(critical?Enchantments.CriticalMultiplier:1)), fight.EnemyHp);
                         fight.EnemyHp -= actual;
                         xp = checked(xp + checked(actual * Combat.Rules.XpPerDamage(profile.Style) * rate));
                         fight.PlayerRemainingTicks = profile.IntervalTicks;
@@ -155,15 +166,17 @@ namespace Idlebound.Foundation
                             // No travel delay or free immediate hit: both clocks restart for the new enemy.
                             fight.EnemyHp = monster.MaxHp;
                             fight.EnemyRemainingTicks = monster.AttackIntervalTicks;
+                            HealPulse(hp,regenBonus,ref regen);
                             continue;
                         }
                     }
                     if (fight.EnemyRemainingTicks == 0)
                     {
                         decimal outgoing = checked(monster.Damage * CombatMath.Triangle(monster.Style, profile.Style));
-                        hp.Hp -= CombatMath.ActualDamage(Math.Max(0, outgoing - profile.Defense), hp.Hp);
+                        hp.Hp -= CombatMath.ActualDamage(Math.Max(0, outgoing - profile.Defense)*(1-profile.DamageReduction), hp.Hp);
                         fight.EnemyRemainingTicks = monster.AttackIntervalTicks;
                     }
+                    HealPulse(hp,regenBonus,ref regen);
                 }
                 var skill = Characters.First(c => c.Id == id).Skills.First(s => s.SkillId == skillId);
                 curve.ApplyAward(skill.StoredXp, xp); // Preflight XP before any bank/HP/counter changes.
@@ -172,18 +185,32 @@ namespace Idlebound.Foundation
                     var outcome = receipt.For(id,monster.Id); outcome.Award(skillId,curve.ApplyAward(skill.StoredXp,xp) - skill.StoredXp);
                     if (hp.Hp == 0) outcome.StopReason = "Defeated";
                 }
-                batch.Plans.Add(new CombatPlan { CharacterId = id, Vitals = hp, Fight = fight, Skill = skill, Xp = xp });
+                batch.Plans.Add(new CombatPlan { CharacterId = id, Vitals = hp, Fight = fight, Skill = skill, Xp = xp, Attacks=attacks, Regen=regen });
+            }
+            foreach(var c in Characters.Where(c=>!encounters.ContainsKey(c.Id)))
+            {
+                var hp=new CharacterVitals(vitals[c.Id].MaxHp,vitals[c.Id].Hp); long phase=regenTicks.TryGetValue(c.Id,out var q)?q:0;
+                decimal bonus=Bonus(c.Id,EnchantmentType.HpRegeneration);
+                if(bonus>0 && hp.Hp>0) {decimal ticks=phase+(decimal)Eligible(c.Id,eligibleTicks,offline);long pulses=(long)(ticks/Enchantments.RegenInterval);phase=(long)(ticks%Enchantments.RegenInterval);hp.Hp=Math.Min(hp.MaxHp,hp.Hp+pulses*hp.MaxHp*Enchantments.RegenFraction*(1+bonus));}
+                batch.Plans.Add(new CombatPlan{CharacterId=c.Id,Vitals=hp,Regen=phase,Attacks=attackCounts.TryGetValue(c.Id,out var a)?a:0});
             }
             return batch;
         }
 
+        private void HealPulse(CharacterVitals hp,decimal bonus,ref long phase)
+        {
+            if(bonus<=0 || phase<Enchantments.RegenInterval)return;
+            phase=0; if(hp.Hp>0)hp.Hp=Math.Min(hp.MaxHp,hp.Hp+hp.MaxHp*Enchantments.RegenFraction*(1+bonus));
+        }
         private void CommitCombat(CombatBatch batch)
         {
             killCounts.Clear(); foreach (var pair in batch.Kills) killCounts.Add(pair.Key, pair.Value);
             foreach (var plan in batch.Plans)
             {
                 vitals[plan.CharacterId].Hp = plan.Vitals.Hp;
-                plan.Skill.Award(plan.Xp, curve);
+                attackCounts[plan.CharacterId]=plan.Attacks; regenTicks[plan.CharacterId]=plan.Regen;
+                plan.Skill?.Award(plan.Xp, curve);
+                if(plan.Fight==null)continue;
                 if (plan.Vitals.Hp == 0)
                 {
                     state.Unassign(plan.CharacterId);

@@ -148,7 +148,7 @@ namespace Idlebound.Foundation
                 result.Progress = 1 - fight.PlayerRemainingTicks / (double)Session.Profile(id).IntervalTicks;
             }
             else if (activity != null && activity.DurationTicks > 0)
-                result.Progress = production && !Session.ProductionJobs.ContainsKey(id) ? 0 : Session.PartialTicks(id) / (double)activity.DurationTicks;
+                result.Progress = production && !Session.ProductionJobs.ContainsKey(id) ? 0 : Session.PartialTicks(id) / (double)Session.EffectiveDuration(id,activity);
             return result;
         }
         public SkillView[] Skills(string id) => Session.Characters.First(c => c.Id == id).Skills.Select(s =>
@@ -164,11 +164,11 @@ namespace Idlebound.Foundation
             var result = new List<ActivityView>();
             foreach (var a in Session.Catalog.Activities.Where(a => a.SkillId == SkillFilter))
                 result.Add(new ActivityView { Id = a.Id, Name = PlayerNames.Display(a.DisplayName), Skill = a.SkillId, Kind = "Gathering", Level = a.RequiredLevel,
-                    Duration = a.DurationTicks, Xp = a.XpPerCycle, Description = "+1 " + Session.BankItems[a.ResourceId] + " per completed cycle • bank " + Session.Quantity(a.ResourceId),
+                    Duration = Session.EffectiveDuration(id,a), Xp = a.XpPerCycle, Description = "+1 " + Session.BankItems[a.ResourceId] + " per completed cycle • bank " + Session.Quantity(a.ResourceId),
                     Locked = !Session.MeetsRequirement(id, a), CanStart = Session.MeetsRequirement(id, a) });
             foreach (var r in Session.Production.Recipes.Where(r => r.SkillId == SkillFilter))
                 result.Add(new ActivityView { Id = r.Id, Name = PlayerNames.Display(r.DisplayName), Skill = r.SkillId, Kind = "Production", Level = r.RequiredLevel,
-                    Duration = r.DurationTicks, Xp = r.XpReward, Description = r.OutputQuantity + " × " + r.OutputName +
+                    Duration = Session.EffectiveDuration(id,Session.Activities.Single(a=>a.Id==r.Id)), Xp = r.XpReward, Description = r.OutputQuantity + " × " + r.OutputName +
                         " • Repeats until out of materials; unfinished inputs refunded on cancellation." + (r.IsBalanceAssumption ? " Starter balance assumption." : " Development recipe."),
                     Locked = !Session.MeetsRequirement(id, Session.Activities.First(a => a.Id == r.Id)),
                     CanStart = Session.CanStartProduction(id, r, true),
@@ -206,6 +206,21 @@ namespace Idlebound.Foundation
                 (CombatStyle)Enum.Parse(typeof(CombatStyle), SkillFilter, true), confirmedSwap, out error);
             else ok = Session.AssignAt(Session.LastSettledTicks, InspectedId, activityId, confirmedSwap, out error);
             return Result(ok, error, "Started " + view.Name + ".");
+        }
+        public string Materialize(string itemId)
+        {var id=Session.MaterializeBankEquipmentAt(Session.LastSettledTicks,itemId);if(id!=null)Changed?.Invoke();return id;}
+        public bool Enchant(string instance,string definition,bool swap,string expectedOccupant)
+        {
+            var occupant=Session.Assignments.FirstOrDefault(p=>p.Key!=InspectedId && p.Value==definition).Key;
+            if(occupant!=expectedOccupant)return Result(false,"Assignment changed; review confirmation again.","");
+            bool ok=Session.StartEnchantAt(Session.LastSettledTicks,InspectedId,instance,definition,swap,out var error);
+            return Result(ok,error,"Enchanting started.");
+        }
+        public bool EquipInstance(string instance)
+        {
+            if(!Session.BankEquipmentInstances.TryGetValue(instance,out var item))return Result(false,"Instance unavailable.","");
+            bool ok=Session.EquipAt(Session.LastSettledTicks,InspectedId,item.Definition.Id,item.Definition.Slot,out var error,instance);
+            return Result(ok,error,"Equipment changed.");
         }
         public bool Stop() => Result(Session.UnassignAt(Session.LastSettledTicks, InspectedId), "No current assignment.", "Stopped. Unfinished production inputs returned.");
         public bool Equip(string itemId)

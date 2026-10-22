@@ -33,7 +33,7 @@ namespace Idlebound.Foundation
         public long AttackIntervalTicks { get; }
         public bool TwoHanded { get; }
         public bool IsDevelopmentOnly => true;
-        // Identity hooks only: no inherent effects or enchantment powers are implemented.
+        // Boss inherent powers remain deferred; permanent enchantments are instance-specific.
         public IReadOnlyList<string> InherentEffectIds { get; } = Array.AsReadOnly(Array.Empty<string>());
 
         public EquipmentDefinition(string id, string name, EquipmentSlot slot, IDictionary<string, int> requirements,
@@ -62,8 +62,8 @@ namespace Idlebound.Foundation
     {
         public string InstanceId { get; }
         public EquipmentDefinition Definition { get; }
-        // One future permanent enchant identity. No application/replacement API or effect calculation.
-        public string PermanentEnchantmentId { get; }
+        // Applied only by the session completion transaction; no replacement/removal command.
+        public string PermanentEnchantmentId { get; internal set; }
         internal EquipmentInstance(string id, EquipmentDefinition definition)
         { InstanceId = id; Definition = definition; PermanentEnchantmentId = null; }
     }

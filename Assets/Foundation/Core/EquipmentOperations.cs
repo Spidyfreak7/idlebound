@@ -18,6 +18,8 @@ namespace Idlebound.Foundation
         public CombatStyle Style { get; }
         public decimal Damage { get; }
         public decimal Defense { get; }
+        public decimal DamageReduction {get; internal set;}
+        public decimal CriticalChance {get; internal set;}
         public long IntervalTicks { get; }
         internal CombatProfile(CombatStyle style, decimal damage, decimal defense, long interval)
         { Style = style; Damage = damage; Defense = defense; IntervalTicks = interval; }
@@ -48,10 +50,11 @@ namespace Idlebound.Foundation
             foreach (var item in list)
             { damage = checked(damage + item.Definition.DamageBonus); defense = checked(defense + item.Definition.DefenseBonus); }
             return new CombatProfile(weapon?.Definition.Style ?? CombatStyle.Melee, damage, defense,
-                weapon?.Definition.AttackIntervalTicks ?? Combat.Rules.BaseIntervalTicks);
+                Math.Max(1,(long)decimal.Ceiling((weapon?.Definition.AttackIntervalTicks ?? Combat.Rules.BaseIntervalTicks)/(1+Aggregate(list,EnchantmentType.AttackSpeed)))))
+                {DamageReduction=Aggregate(list,EnchantmentType.Defense),CriticalChance=Aggregate(list,EnchantmentType.CriticalChance)};
         }
 
-        public bool EquipAt(long ticks, string characterId, string itemId, EquipmentSlot slot, out string error)
+        public bool EquipAt(long ticks, string characterId, string itemId, EquipmentSlot slot, out string error, string instanceId = null)
         {
             SettleTo(ticks);
             var definition = Equipment.Definitions.FirstOrDefault(d => d.Id == itemId);
@@ -60,6 +63,7 @@ namespace Idlebound.Foundation
             { error = "Unknown item/character or incompatible slot."; return false; }
             if (definition.Requirements.Any(r => character.Skills.First(s => s.SkillId == r.Key).Level < r.Value))
             { error = "Equip skill requirements not met."; return false; }
+            long oldDuration=AssignedDuration(characterId);
             var current = loadouts[characterId].Items;
             if (slot == EquipmentSlot.Offhand && current.TryGetValue(EquipmentSlot.Mainhand, out var main) && main.Definition.TwoHanded)
             { error = "A two-handed weapon blocks offhand."; return false; }
@@ -67,7 +71,8 @@ namespace Idlebound.Foundation
             var nextBank = new Dictionary<string, long>(inventory);
             var nextInstances = new Dictionary<string, EquipmentInstance>(bankInstances);
             var nextSlots = new Dictionary<EquipmentSlot, EquipmentInstance>(current);
-            var candidate = nextInstances.Values.Where(i => i.Definition.Id == itemId).OrderBy(i => i.InstanceId, StringComparer.Ordinal).FirstOrDefault();
+            var candidate = nextInstances.Values.Where(i => i.Definition.Id == itemId && !IsItemLocked(i.InstanceId) && (instanceId==null || i.InstanceId==instanceId)).OrderBy(i => i.InstanceId, StringComparer.Ordinal).FirstOrDefault();
+            if(instanceId!=null && candidate==null || candidate==null && Quantity(itemId)<=bankInstances.Values.LongCount(i=>i.Definition.Id==itemId)) {error="Target instance is locked or unavailable.";return false;}
             long serial = equipmentSerial;
             if (candidate == null)
             {
@@ -91,7 +96,7 @@ namespace Idlebound.Foundation
             bankInstances.Clear(); foreach (var pair in nextInstances) bankInstances.Add(pair.Key, pair.Value);
             current.Clear(); foreach (var pair in nextSlots) current.Add(pair.Key, pair.Value);
             equipmentSerial = serial;
-            OnEquipmentChanged(characterId, profile);
+            OnEquipmentChanged(characterId, profile,oldDuration);
             error = null;
             return true;
         }
@@ -101,6 +106,7 @@ namespace Idlebound.Foundation
             SettleTo(ticks);
             if (!loadouts.TryGetValue(characterId, out var loadout) || !loadout.Items.TryGetValue(slot, out var instance))
             { error = "Unknown character or empty slot."; return false; }
+            long oldDuration=AssignedDuration(characterId);
             var nextBank = new Dictionary<string, long>(inventory);
             var nextInstances = new Dictionary<string, EquipmentInstance>(bankInstances);
             ReturnEquipment(nextBank, nextInstances, instance);
@@ -108,7 +114,7 @@ namespace Idlebound.Foundation
             ReplaceInventory(nextBank);
             bankInstances.Clear(); foreach (var pair in nextInstances) bankInstances.Add(pair.Key, pair.Value);
             loadout.Items.Remove(slot);
-            OnEquipmentChanged(characterId, profile);
+            OnEquipmentChanged(characterId, profile,oldDuration);
             error = null;
             return true;
         }
@@ -130,8 +136,13 @@ namespace Idlebound.Foundation
             ReplaceInventory(next);
         }
 
-        private void OnEquipmentChanged(string characterId, CombatProfile profile)
+        private long AssignedDuration(string id) => Assignments.TryGetValue(id,out var a)?EffectiveDuration(id,Activities.Single(x=>x.Id==a)):0;
+        private void OnEquipmentChanged(string characterId, CombatProfile profile,long oldDuration)
         {
+            // Preserve completed fraction; floor cannot grant a premature action at a gear boundary.
+            if(oldDuration>0 && partialTicks.TryGetValue(characterId,out var progress))
+                partialTicks[characterId]=(long)decimal.Floor(progress*(decimal)AssignedDuration(characterId)/oldDuration);
+            if(Bonus(characterId,EnchantmentType.HpRegeneration)==0)regenTicks.Remove(characterId);
             if (encounters.TryGetValue(characterId, out var fight))
                 fight.PlayerRemainingTicks = profile.IntervalTicks;
         }

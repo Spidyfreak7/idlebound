@@ -31,19 +31,19 @@ namespace Idlebound.Foundation
             using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(text)))
                 return (T)new DataContractJsonSerializer(typeof(T)).ReadObject(stream);
         }
-        public static string Encode(SaveDocument document)
+        public static string Encode(SaveDocument document, int version = Version)
         {
             string payload = Json(document);
-            string result = Json(new Envelope { Version = Version, Payload = payload, Sha256 = Hash(payload) });
+            string result = Json(new Envelope { Version = version, Payload = payload, Sha256 = Hash(payload) });
             if (Encoding.UTF8.GetByteCount(result) > MaximumBytes) throw new SerializationException("Save size limit exceeded.");
             return result;
         }
-        public static SaveDocument Decode(string text)
+        public static SaveDocument Decode(string text, int version = Version)
         {
             var envelope = Read<Envelope>(text);
             if (envelope == null) throw new SerializationException("Missing save envelope.");
-            if (envelope.Version > Version) throw new SaveCompatibilityException("Unsupported local save version " + envelope.Version + ". Files were preserved.");
-            if (envelope.Version != Version) throw new SerializationException("Missing or invalid save version.");
+            if (envelope.Version > version) throw new SaveCompatibilityException("Unsupported local save version " + envelope.Version + ". Files were preserved.");
+            if (envelope.Version != version) throw new SerializationException("Missing or invalid save version.");
             if (envelope.Payload == null || envelope.Sha256 != Hash(envelope.Payload)) throw new SerializationException("Local save checksum mismatch.");
             return Read<SaveDocument>(envelope.Payload);
         }
@@ -63,12 +63,13 @@ namespace Idlebound.Foundation
         public string Diagnostic { get; private set; }
         private bool invalidPrimary;
         private readonly Action beforeReplace;
-        public AtomicLocalSaveStore(string path, Action beforeReplace = null)
-        { Path = System.IO.Path.GetFullPath(path ?? throw new ArgumentNullException(nameof(path))); this.beforeReplace = beforeReplace; }
+        private readonly int version;
+        public AtomicLocalSaveStore(string path, Action beforeReplace = null, int version = SaveCodec.Version)
+        { Path = System.IO.Path.GetFullPath(path ?? throw new ArgumentNullException(nameof(path))); this.beforeReplace = beforeReplace; this.version=version; }
         private SaveDocument ReadFile(string file, Action<SaveDocument> validate)
         {
             if (new FileInfo(file).Length > SaveCodec.MaximumBytes) throw new SerializationException("Oversized save.");
-            var document = SaveCodec.Decode(File.ReadAllText(file,Encoding.UTF8)); validate(document); return document;
+            var document = SaveCodec.Decode(File.ReadAllText(file,Encoding.UTF8),version); validate(document); return document;
         }
         public SaveDocument Load(Action<SaveDocument> validate)
         {
@@ -101,13 +102,13 @@ namespace Idlebound.Foundation
         }
         public void Write(SaveDocument document)
         {
-            string text = SaveCodec.Encode(document); SaveCodec.Decode(text);
+            string text = SaveCodec.Encode(document,version); SaveCodec.Decode(text,version);
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path));
             // Never downgrade a future-version file, including a future-version backup.
             foreach (var existing in new[] { Path, Backup })
                 if (File.Exists(existing))
                 {
-                    try { SaveCodec.Decode(File.ReadAllText(existing,Encoding.UTF8)); }
+                    try { SaveCodec.Decode(File.ReadAllText(existing,Encoding.UTF8),version); }
                     catch (SaveCompatibilityException) { throw; }
                     catch (SerializationException)
                     {

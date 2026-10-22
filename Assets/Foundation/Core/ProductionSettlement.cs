@@ -12,54 +12,56 @@ namespace Idlebound.Foundation
             var plans = new List<Settlement>();
             foreach (var assignment in Assignments.OrderBy(p => p.Key,StringComparer.Ordinal))
             {
-                if (Combat.Monsters.Any(m => m.Id == assignment.Value)) continue;
+                if (Combat.Monsters.Any(m => m.Id == assignment.Value) || Enchantments.Definitions.Any(e=>e.Id==assignment.Value)) continue;
                 var recipe = Production.Recipes.FirstOrDefault(r => r.Id == assignment.Value);
                 if (recipe != null && !productionJobs.ContainsKey(assignment.Key)) continue; // Stopped means stopped, even after stock arrives.
                 var activity = Activities.First(a => a.Id == assignment.Value);
-                plans.Add(new Settlement { CharacterId = assignment.Key, Activity = activity, Recipe = recipe,
+                plans.Add(new Settlement { CharacterId = assignment.Key, Activity = activity, Recipe = recipe, Limit=Eligible(assignment.Key,eligible,offline), Duration=EffectiveDuration(assignment.Key,activity),
                     Skill = Characters.First(c => c.Id == assignment.Key).Skills.First(s => s.SkillId == activity.SkillId),
                     Remaining = PartialTicks(assignment.Key), TotalCycles = CompletedCycles(assignment.Key) });
             }
-            long remaining = eligible;
+            long remaining = plans.Count==0?0:plans.Max(p=>p.Limit);
+            long cursor=0;
             while (remaining > 0)
             {
-                var running = plans.Where(p => p.Recipe != null && !p.StoppedProduction).ToArray();
-                long step = running.Length == 0 ? remaining : Math.Min(remaining,running.Min(p => p.Activity.DurationTicks - p.Remaining));
+                var running = plans.Where(p => p.Recipe != null && !p.StoppedProduction && p.Limit>cursor).ToArray();
+                long step = running.Length == 0 ? remaining : Math.Min(remaining,running.Min(p => p.Duration - p.Remaining));
+                if(plans.Any(p=>p.Limit>cursor)) step=Math.Min(step,plans.Where(p=>p.Limit>cursor).Min(p=>p.Limit-cursor));
                 // Pure production can batch in O(inputs), including the reservation at an exact boundary.
                 if (running.Length == 1 && plans.All(p => p.Recipe != null))
                 {
                     var p = running[0];
                     long affordable = p.Recipe.Inputs.Min(i => (bank.TryGetValue(i.Key,out var n) ? n : 0) / i.Value);
-                    decimal ticks = p.Remaining + (decimal)remaining;
-                    long possible = checked((long)decimal.Floor(ticks / p.Activity.DurationTicks));
+                    decimal ticks = p.Remaining + (decimal)Math.Min(remaining,p.Limit-cursor);
+                    long possible = checked((long)decimal.Floor(ticks / p.Duration));
                     long cycles = possible <= affordable ? possible : checked(affordable + 1);
                     bool stopped = possible > affordable;
                     long reservations = stopped ? cycles - 1 : cycles;
                     Consume(p.Recipe,bank,reservations);
                     AddCycles(p,cycles,offline,bank,receipt);
-                    p.Remaining = stopped ? 0 : (long)(ticks % p.Activity.DurationTicks);
+                    p.Remaining = stopped ? 0 : (long)(ticks % p.Duration);
                     p.StoppedProduction = stopped;
                     remaining = 0;
                     break;
                 }
-                foreach (var p in plans.Where(p => p.Recipe == null))
+                foreach (var p in plans.Where(p => p.Recipe == null && p.Limit>cursor))
                 {
                     decimal ticks = p.Remaining + (decimal)step;
-                    long cycles = checked((long)decimal.Floor(ticks / p.Activity.DurationTicks));
-                    p.Remaining = (long)(ticks % p.Activity.DurationTicks);
+                    long cycles = checked((long)decimal.Floor(ticks / p.Duration));
+                    p.Remaining = (long)(ticks % p.Duration);
                     AddCycles(p,cycles,offline,bank,receipt);
                 }
                 foreach (var p in running) p.Remaining = checked(p.Remaining + step);
                 // Same-timestamp policy: gathering, then all completed outputs, then new reservations
                 // in ordinal character-ID order. Future gathered resources are never borrowed.
-                var completed = running.Where(p => p.Remaining == p.Activity.DurationTicks).ToArray();
+                var completed = running.Where(p => p.Remaining == p.Duration).ToArray();
                 foreach (var p in completed) { p.Remaining = 0; AddCycles(p,1,offline,bank,receipt); }
                 foreach (var p in completed)
                 {
                     if (p.Recipe.Inputs.All(i => bank.TryGetValue(i.Key,out var n) && n >= i.Value)) Consume(p.Recipe,bank,1);
                     else p.StoppedProduction = true;
                 }
-                remaining -= step;
+                remaining -= step; cursor+=step;
             }
             foreach (var p in plans)
             {

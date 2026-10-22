@@ -21,7 +21,9 @@ namespace Idlebound.Foundation
                     Hp = vitals[c.Id].Hp, Partial = PartialTicks(c.Id), Cycles = CompletedCycles(c.Id),
                     Encounter = encounters.TryGetValue(c.Id,out var f) ? new SavedEncounter
                         { Monster = f.MonsterId, Hp = f.EnemyHp, PlayerTicks = f.PlayerRemainingTicks, EnemyTicks = f.EnemyRemainingTicks } : null,
-                    Effects = EffectsFor(c.Id).Select(e => new SavedEffect { Source = e.SourceId, Skill = e.SkillId, Efficiency = e.Efficiency }).ToArray()
+                    Enchant=enchantJobs.TryGetValue(c.Id,out var ej)?new SavedEnchant{Instance=ej.InstanceId,Definition=ej.Definition.Id}:null,
+                    Attacks=attackCounts.TryGetValue(c.Id,out var ac)?ac:0, Regen=regenTicks.TryGetValue(c.Id,out var rg)?rg:0,
+                    Effects = (effects.TryGetValue(c.Id,out var ef)?ef:Array.Empty<BackgroundXpEffect>()).Select(e => new SavedEffect { Source = e.SourceId, Skill = e.SkillId, Efficiency = e.Efficiency }).ToArray()
                 }).ToArray(),
                 Bank = inventory.OrderBy(p => p.Key,StringComparer.Ordinal).Select(p => new ItemAmount { Id = p.Key, Quantity = p.Value }).ToArray(),
                 Equipment = loadouts.SelectMany(p => p.Value.Items.Values.Select(i => SaveGear(i,p.Key)))
@@ -32,8 +34,7 @@ namespace Idlebound.Foundation
         }
         private static SavedEquipment SaveGear(EquipmentInstance instance, string owner)
         {
-            if (instance.PermanentEnchantmentId != null) throw new InvalidOperationException("Unimplemented enchantment cannot be saved.");
-            return new SavedEquipment { Instance = instance.InstanceId, Item = instance.Definition.Id, Owner = owner };
+            return new SavedEquipment { Instance = instance.InstanceId, Item = instance.Definition.Id, Owner = owner, Enchantment=instance.PermanentEnchantmentId };
         }
         private static void Require(bool condition, string message)
         { if (!condition) throw new ArgumentException("Invalid save: " + message); }
@@ -48,7 +49,7 @@ namespace Idlebound.Foundation
             Require(data.RefundInputs == catalogs.RefundCancelledInputs,"cancellation policy changed");
             Require(data.Characters != null && data.Characters.Length >= 1 && data.Characters.Length <= data.Slots,"roster");
             Require(data.Bank != null && data.Equipment != null && data.Kills != null,"missing collections");
-            var result = new GatheringSession(catalogs.Catalog,catalogs.curve,catalogs.Production,data.RefundInputs,catalogs.Equipment,catalogs.Combat,new SeededLootRoller(data.LootSeed));
+            var result = new GatheringSession(catalogs.Catalog,catalogs.curve,catalogs.Production,data.RefundInputs,catalogs.Equipment,catalogs.Combat,new SeededLootRoller(data.LootSeed),catalogs.Enchantments);
             result.state = new GameState(new RosterAccess(data.Slots),result.Skills,result.Activities);
             result.loadouts.Clear(); result.vitals.Clear();
             foreach (var c in data.Characters)
@@ -81,7 +82,8 @@ namespace Idlebound.Foundation
                 Require(long.TryParse(item.Instance.Substring(5),NumberStyles.None,CultureInfo.InvariantCulture,out var serial) && serial > 0 && serial <= data.EquipmentSerial,"instance serial");
                 var definition = result.Equipment.Definitions.FirstOrDefault(d => d.Id == item.Item);
                 Require(definition != null,"equipment catalog reference");
-                var gear = new EquipmentInstance(item.Instance,definition);
+                Require(item.Enchantment==null || result.Enchantments.Definitions.Any(e=>e.Id==item.Enchantment),"enchantment catalog reference");
+                var gear = new EquipmentInstance(item.Instance,definition){PermanentEnchantmentId=item.Enchantment};
                 if (item.Owner == null) result.bankInstances.Add(item.Instance,gear);
                 else
                 {
@@ -104,6 +106,15 @@ namespace Idlebound.Foundation
                     Require(recipe != null && c.Assignment == c.Job,"reserved job mismatch");
                     result.productionJobs.Add(c.Id,recipe);
                 }
+                Require(c.Attacks>=0 && c.Regen>=0 && c.Regen<result.Enchantments.RegenInterval,"attack/regeneration clock");
+                result.attackCounts[c.Id]=c.Attacks;result.regenTicks[c.Id]=c.Regen;
+                if(c.Enchant!=null)
+                {
+                    var e=result.Enchantments.Definitions.SingleOrDefault(x=>x.Id==c.Enchant.Definition);
+                    Require(e!=null && c.Job==null && c.Encounter==null && c.Assignment==e.Id && result.bankInstances.TryGetValue(c.Enchant.Instance??"",out var target) && target.PermanentEnchantmentId==null && !result.IsItemLocked(c.Enchant.Instance),"enchant reservation/target");
+                    result.enchantJobs.Add(c.Id,new EnchantJob(c.Enchant.Instance,e));
+                }
+                Require(!result.Enchantments.Definitions.Any(e=>e.Id==c.Assignment) || c.Enchant!=null,"missing enchant job");
                 bool combat = result.Combat.Monsters.Any(m => m.Id == c.Assignment);
                 Require(combat == (c.Encounter != null),"missing/orphan encounter");
                 if (c.Encounter != null)
@@ -113,7 +124,7 @@ namespace Idlebound.Foundation
                     Require(f.PlayerTicks > 0 && f.PlayerTicks <= result.Profile(c.Id).IntervalTicks && f.EnemyTicks > 0 && f.EnemyTicks <= monster.AttackIntervalTicks,"encounter clocks");
                     result.encounters.Add(c.Id,new CombatEncounter(f.Monster,f.Hp,f.PlayerTicks,f.EnemyTicks));
                 }
-                Require(c.Partial == 0 || activity != null && !combat && c.Partial < activity.DurationTicks &&
+                Require(c.Partial == 0 || activity != null && !combat && c.Partial < result.EffectiveDuration(c.Id,activity) &&
                     (!result.Production.Recipes.Any(r => r.Id == c.Assignment) || c.Job != null),"cycle progress");
                 if (activity != null && !combat) result.partialTicks[c.Id] = c.Partial;
             }

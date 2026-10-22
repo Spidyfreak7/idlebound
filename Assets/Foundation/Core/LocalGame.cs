@@ -15,11 +15,11 @@ namespace Idlebound.Foundation
         private SaveDocument document;
         public GatheringSession Session { get; private set; }
         public OfflineReport Pending => document?.Pending == null ? null : SaveCodec.Copy(document.Pending);
-        public string RecoveryDiagnostic => (store as AtomicLocalSaveStore)?.Diagnostic;
+        public string RecoveryDiagnostic => (store as AtomicLocalSaveStore)?.Diagnostic ?? (store as MigratingLocalSaveStore)?.Diagnostic;
         public long BoundaryUtcTicks => document?.UtcTicks ?? 0;
         public LocalGame(ILocalSaveStore store, Func<GatheringSession> factory, string catalog)
         { this.store = store ?? throw new ArgumentNullException(nameof(store)); this.factory = factory ?? throw new ArgumentNullException(nameof(factory)); this.catalog = catalog ?? throw new ArgumentNullException(nameof(catalog)); }
-        private void Validate(SaveDocument data)
+        internal void Validate(SaveDocument data)
         {
             if (data == null || data.UtcTicks <= 0 || data.UtcTicks > DateTime.MaxValue.Ticks) throw new ArgumentException("Invalid UTC boundary.");
             if (data.Catalog != catalog) throw new SaveCompatibilityException("Saved catalogs differ from installed catalogs. Migration/review required; files preserved.");

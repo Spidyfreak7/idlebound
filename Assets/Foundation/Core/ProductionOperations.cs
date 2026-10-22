@@ -78,6 +78,9 @@ namespace Idlebound.Foundation
         private Dictionary<string, long> PreviewRefunds(IEnumerable<string> characters)
         {
             var result = new Dictionary<string, long>(inventory);
+            foreach(var id in characters.Where(id=>id!=null).Distinct())
+                if(enchantJobs.TryGetValue(id,out var enchant)) foreach(var input in enchant.Definition.Inputs)
+                    result[input.Key]=checked((result.TryGetValue(input.Key,out var n)?n:0)+input.Value);
             if (!RefundCancelledInputs) return result;
             foreach (var id in characters.Where(id => id != null).Distinct())
                 if (productionJobs.TryGetValue(id, out var job))
@@ -103,6 +106,7 @@ namespace Idlebound.Foundation
                     partialTicks.Remove(pair.Key);
                     // Refunds were preflighted/committed before discarding this reservation.
                     productionJobs.Remove(pair.Key);
+                    enchantJobs.Remove(pair.Key);
                     encounters.Remove(pair.Key);
                 }
         }

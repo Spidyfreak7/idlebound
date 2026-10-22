@@ -29,8 +29,14 @@ namespace Idlebound.Foundation
         [DataMember(IsRequired = true)] public SavedSkill[] Skills;
         [DataMember(IsRequired = true)] public long Partial, Cycles;
         [DataMember(IsRequired = true)] public decimal Hp;
+        [DataMember] public SavedEnchant Enchant;
+        [DataMember] public long Attacks, Regen;
         [DataMember(IsRequired = true)] public SavedEncounter Encounter;
         [DataMember(IsRequired = true)] public SavedEffect[] Effects;
+    }
+    [DataContract] public sealed class SavedEnchant
+    {
+        [DataMember(IsRequired=true)] public string Instance, Definition;
     }
     [DataContract] public sealed class SavedSkill
     {
@@ -42,6 +48,7 @@ namespace Idlebound.Foundation
     {
         // Null owner means a bank instance. Slot is reconstructed from the item definition.
         [DataMember(IsRequired = true)] public string Instance, Item, Owner;
+        [DataMember] public string Enchantment;
     }
     [DataContract] public sealed class SavedEncounter
     {
