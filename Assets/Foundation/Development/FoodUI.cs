@@ -30,7 +30,7 @@ namespace Idlebound.Foundation.Development
                 Button(content,"Change HP threshold",()=>Modal("HP threshold · "+Model.Character(id).Name,options=>
                 {
                     for(int n=10;n<=90;n+=10)
-                    {int threshold=n;Button(options,n+"% HP",()=>{CloseModal();Act(()=>Model.ConfigureFood(true,threshold,Session.FoodFor(id).Preferred));FoodSettingsModal();});}
+                    {int threshold=n;Button(options,n+"% HP",()=>UpdateFoodSettings(()=>Model.ConfigureFood(true,threshold,Session.FoodFor(id).Preferred)));}
                 }));
                 Button(content,"Auto",()=>SetBankFoodPreference("auto"));
                 foreach(var food in Session.Foods.Definitions)
@@ -43,7 +43,21 @@ namespace Idlebound.Foundation.Development
         }
         private void SetBankFoodPreference(string preference)
         {
-            var s=Session.FoodFor(Model.InspectedId);CloseModal();Act(()=>Model.ConfigureFood(true,s.Threshold,preference));FoodSettingsModal();
+            var s=Session.FoodFor(Model.InspectedId);
+            UpdateFoodSettings(()=>Model.ConfigureFood(true,s.Threshold,preference));
+        }
+        private void UpdateFoodSettings(Func<bool> change)
+        {
+            if(host.IsLoading || host.PersistenceError!=null)return;
+            try
+            {
+                if(!change())return;
+                localNotice="";
+                // Replace only the modal contents. Do not deactivate its root or rebuild Bank
+                // while its threshold/preference button callback is still executing.
+                FoodSettingsModal();
+            }
+            catch(Exception error){localNotice=error.Message;}
         }
         private void BankFoodActions(Transform content,FoodDefinition food)
         {

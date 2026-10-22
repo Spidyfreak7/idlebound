@@ -38,3 +38,12 @@ Core .NET Standard 2.1 compilation, C# syntax, metadata/assembly checks, unchang
 8. Window → General → Test Runner: run all **626 EditMode** and **22 PlayMode** tests in the isolated runner scene; export XML and inspect Console. Batch-mode commands from Stage8B08Verification.md still apply with these new expected counts. Actual phone rendering, touch and lifecycle verification remain required.
 
 Changes are limited to food domain/projection/UI, the affected food/UI tests and documentation. No balance CSV, schema, migrator, scheduler, scenes, equipment layout, nine-skill grid or project/package settings changed.
+
+
+## PlayMode modal follow-up
+
+Windows baseline verification reported **626/626 EditMode and 21/22 PlayMode**, with the food flow failing to find “Cooked shrimp” after changing the threshold to 80%. Source inspection confirmed that label is unchanged, but the callback closed/deactivated the modal, rebuilt Bank and reopened the modal in one frame while old UI objects awaited Unity destruction. Threshold and preference changes now update the authoritative model and replace the modal contents once, without closing its root or rebuilding Bank. This removes that unnecessary lifecycle path; exact Windows runtime confirmation remains required.
+
+The original failing test retains all assertions and adds explicit threshold, returned modal title and selected-preference checks. Added `FoodSettingsKeepPreferenceButtonsAcrossRepeatedSameFrameModalTransitions`: exercises 10/80/90/50 thresholds, immediate shrimp/Auto selection, next-frame survival of both food buttons, one active modal, unchanged session snapshot and Bank return. Authored totals are now **626 EditMode / 23 PlayMode**. The cloud reran **617/617 standalone cases**, zero failures/skips, and static syntax/scope checks. Unity is unavailable; the UI fix/new PlayMode regression have not been executed here.
+
+On Windows, pull develop, stop Play, refresh/recompile and rerun the original failing test plus the new regression, then all **626 EditMode / 23 PlayMode** tests. Manually open Bank → Food settings → Change HP threshold → 80%; verify the Food settings modal immediately returns with Cooked shrimp/Cooked sardine/Auto available. Select shrimp, then Auto, repeat threshold changes and verify target identity, stock, HP, settings and Back to Character. Repeat 360×640 and 720×1280. No gameplay, balance, save schema/fingerprint or domain code changed in this follow-up.

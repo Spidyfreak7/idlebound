@@ -394,7 +394,11 @@ namespace Idlebound.Foundation.Tests
             Assert.That(root.GetComponentsInChildren<Text>().Any(t=>t.text=="Auto-eating is always active in combat."),Is.True);
             Assert.That(root.GetComponentsInChildren<Button>().Any(b=>new[]{"Auto-eat ON","Auto-eat OFF"}.Contains(b.GetComponentInChildren<Text>()?.text)),Is.False);
             Button("Change HP threshold").onClick.Invoke();yield return null;Button("80% HP").onClick.Invoke();yield return null;
-            Button("Cooked shrimp").onClick.Invoke();yield return null;Button("Auto").onClick.Invoke();yield return null;
+            Assert.That(host.Runtime.Session.FoodFor("character-1").Threshold,Is.EqualTo(80));
+            Assert.That(root.GetComponentsInChildren<Text>().Any(t=>t.text=="Food settings · Character 1"),Is.True);
+            Button("Cooked shrimp").onClick.Invoke();yield return null;
+            Assert.That(host.Runtime.Session.FoodFor("character-1").Preferred,Is.EqualTo("cooked-shrimp-item"));
+            Button("Auto").onClick.Invoke();yield return null;
             Assert.That(host.Runtime.Session.FoodFor("character-1").Preferred,Is.EqualTo("auto"));Button("Close").onClick.Invoke();yield return null;
             root.GetComponentsInChildren<Button>().Single(b=>b.name=="Bank item: cooked-shrimp-item").onClick.Invoke();yield return null;
             Button("Eat").onClick.Invoke();yield return null;Assert.That(host.Runtime.Session.Vitals["character-1"].Hp,Is.EqualTo(28));Assert.That(host.Runtime.Session.Quantity("cooked-shrimp-item"),Is.EqualTo(2));Assert.That(Button("Eat").interactable,Is.False);
@@ -415,6 +419,38 @@ namespace Idlebound.Foundation.Tests
             Assert.That(host.Runtime.Session.Vitals["character-1"].Hp,Is.EqualTo(33));
             Button("Bank").onClick.Invoke();yield return null;root.GetComponentsInChildren<Button>().Single(b=>b.name=="Bank item: cooked-shrimp-item").onClick.Invoke();yield return null;
             Assert.That(root.GetComponentsInChildren<Text>().Any(t=>t.text.Contains("Restores 8 HP")),Is.True);
+        }
+
+        [UnityTest] public IEnumerator FoodSettingsKeepPreferenceButtonsAcrossRepeatedSameFrameModalTransitions()
+        {
+            InstallFoodFixture();var host=GameSessionHost.Instance;
+            Button("Inspect Character 1").onClick.Invoke();yield return null;
+            Button("Bank").onClick.Invoke();yield return null;
+            Button("Food settings").onClick.Invoke();yield return null;
+            var session=host.Runtime.Session;string before=SaveCodec.Json(session.Capture());
+            foreach(int threshold in new[]{10,80,90,50})
+            {
+                Button("Change HP threshold").onClick.Invoke();
+                Button(threshold+"% HP").onClick.Invoke();
+                Assert.That(session.FoodFor("character-1").Threshold,Is.EqualTo(threshold));
+                Assert.That(Button("Cooked shrimp").gameObject.activeInHierarchy,Is.True);
+                Assert.That(Button("Cooked sardine").gameObject.activeInHierarchy,Is.True);
+                Button("Cooked shrimp").onClick.Invoke();
+                Assert.That(session.FoodFor("character-1").Preferred,Is.EqualTo("cooked-shrimp-item"));
+                Button("Auto").onClick.Invoke();
+                Assert.That(session.FoodFor("character-1").Preferred,Is.EqualTo("auto"));
+                yield return null;
+                Assert.That(root.GetComponentsInChildren<Transform>().Count(t=>t.name=="Details" && t.gameObject.activeInHierarchy),Is.EqualTo(1));
+                Assert.That(root.GetComponentsInChildren<Text>().Any(t=>t.text=="Food settings · Character 1"),Is.True);
+                Assert.That(Button("Cooked shrimp").interactable,Is.True);
+                Assert.That(Button("Auto").interactable,Is.True);
+                Assert.That(host.Runtime.Session,Is.SameAs(session));
+            }
+            Assert.That(SaveCodec.Json(session.Capture()),Is.EqualTo(before),"Settings round-trip must not alter HP, stock, time, assignment, active selection or other characters.");
+            Button("Close").onClick.Invoke();yield return null;
+            Button("Back to Character").onClick.Invoke();yield return null;
+            Assert.That(host.Model.InspectedId,Is.EqualTo("character-1"));
+            Assert.That(host.Model.CharacterTab,Is.EqualTo(CharacterScreen.Overview));
         }
     }
 }
