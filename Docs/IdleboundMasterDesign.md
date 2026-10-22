@@ -13,6 +13,10 @@ This register reconciles all four uploaded handoffs, read completely for Stage 8
 
 Original PDFs/workbook were not supplied here. S2's positive tables supply values that S1/S3/S4 say were unavailable; those absence statements are not explicit rejections of S2. Every source table is preserved verbatim in the archival annex below. Status words inside those excerpts retain the source author's claim and do not override this reconciliation.
 
+## Stage 8B-07 — later explicit authority
+
+The user's Stage 8B-07 handoff supersedes older enchant unlock schedules and unresolved family/stacking/cost claims below. It approves twelve named types, four tiers, 48 individually staggered Magic unlocks, permanent nonreplaceable enchantments on all ten slots, named-skill effects, equipped-only sources, 50% background XP cap and per-character 4–7h offline limits. Exact current tables and provenance are in `Stage8B07BalanceDecisions.md` and the two enchantment CSVs. Earlier source tables remain unchanged as historical records. I–III potency, the 25% exact-tier four-piece bonus, shared material/time/XP test balance and source-gated regeneration remain explicitly provisional as documented there. This does not approve boss effects, gems, new equipment recipes, cloud saves or monetization.
+
 ## Stage 8B-03B — current explicit approvals and new assumptions
 
 This later user request supersedes the earlier missing-data prohibition **for the specified curve and gathering XP**, and explicitly authorizes a new starter balance pass. Original source tables below remain untouched. These updates are not retroactively attributed to S1–S4.
