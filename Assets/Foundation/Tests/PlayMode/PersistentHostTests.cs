@@ -62,5 +62,16 @@ namespace Idlebound.Foundation.Tests
             yield return Close(); yield return Open();
             Assert.That(GameSessionHost.Instance.PendingReport,Is.Null); Assert.That(GameSessionHost.Instance.Runtime.Session.Quantity("metal-1"),Is.EqualTo(360));
         }
+
+        [UnityTest] public IEnumerator FoodPreferencesStockAndMidCombatStateSurviveColdHostRestart()
+        {
+            var host=GameSessionHost.Instance;var template=host.Runtime.Session;host.SaveCurrent();var path=Path.Combine(directory,"player-v3.json");
+            yield return Close();
+            var document=SaveCodec.Decode(File.ReadAllText(path),3);document.State.Bank=new[]{new ItemAmount{Id="cooked-shrimp-item",Quantity=5}};document.State.Characters[0].Hp=26;
+            var seeded=GatheringSession.Restore(document.State,template);seeded.ConfigureFoodAt(seeded.LastSettledTicks,"character-1",true,80,"cooked-shrimp-item",out _);seeded.StartCombatAt(seeded.LastSettledTicks,"character-1","dev-chicken",CombatStyle.Melee,false,out _);document.State=seeded.Capture();
+            new AtomicLocalSaveStore(path,version:3).Write(document);
+            yield return Open();host=GameSessionHost.Instance;Assert.That(host.Runtime.Session.FoodFor("character-1").Threshold,Is.EqualTo(80));Assert.That(host.Runtime.Session.FoodFor("character-1").Preferred,Is.EqualTo("cooked-shrimp-item"));Assert.That(host.Runtime.Session.Quantity("cooked-shrimp-item"),Is.EqualTo(3));Assert.That(host.Runtime.Session.Encounters.ContainsKey("character-1"),Is.True);
+            yield return Close();yield return Open();Assert.That(GameSessionHost.Instance.Runtime.Session.Quantity("cooked-shrimp-item"),Is.EqualTo(3));
+        }
     }
 }

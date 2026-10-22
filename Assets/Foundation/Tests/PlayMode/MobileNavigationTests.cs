@@ -375,5 +375,36 @@ namespace Idlebound.Foundation.Tests
             Assert.That(root.GetComponentsInChildren<Text>().Any(t=>t.text.Contains("Matching four-piece set: active") && t.text.Contains("50.0") && t.text.Contains("4h")),Is.True);
             Assert.That(session.HasMatchingSet("character-1"),Is.True);
         }
+
+        private void InstallFoodFixture(decimal hp=20)
+        {
+            var host=GameSessionHost.Instance;host.SetRunning(false);var template=host.Runtime.Session;var d=template.Capture();
+            foreach(var c in d.Characters)c.Hp=hp;
+            d.Bank=new[]{new ItemAmount{Id="cooked-shrimp-item",Quantity=3},new ItemAmount{Id="cooked-sardine-item",Quantity=1}};
+            host.Runtime.AdoptRestored(host,GatheringSession.Restore(d,template),Time.realtimeSinceStartupAsDouble,false);
+        }
+        [UnityTest] public IEnumerator OverviewFoodControlsEatConfigureAndNavigationKeepIndependentState()
+        {
+            InstallFoodFixture();var host=GameSessionHost.Instance;Button("Inspect Character 1").onClick.Invoke();yield return null;
+            Assert.That(root.GetComponentsInChildren<Transform>().Any(t=>t.name=="Food controls"),Is.True);
+            Button("Eat").onClick.Invoke();yield return null;Assert.That(host.Runtime.Session.Vitals["character-1"].Hp,Is.EqualTo(32));Assert.That(host.Runtime.Session.Quantity("cooked-sardine-item"),Is.Zero);
+            Assert.That(Button("Eat").interactable,Is.False,"Same-timestamp repeated serving is blocked.");
+            Button("Threshold").onClick.Invoke();yield return null;Button("80% HP").onClick.Invoke();yield return null;
+            Button("Food preference").onClick.Invoke();yield return null;Button("Cooked shrimp · 8 HP").onClick.Invoke();yield return null;
+            Button("Auto-eat ON").onClick.Invoke();yield return null;
+            var s=host.Runtime.Session;Assert.That(s.FoodFor("character-1").Enabled,Is.False);Assert.That(s.FoodFor("character-1").Threshold,Is.EqualTo(80));Assert.That(s.FoodFor("character-1").Preferred,Is.EqualTo("cooked-shrimp-item"));
+            long ticks=s.LastSettledTicks;Button("Bank").onClick.Invoke();yield return null;Button("Back to Character").onClick.Invoke();yield return null;
+            Assert.That(host.Runtime.Session,Is.SameAs(s));Assert.That(s.LastSettledTicks,Is.EqualTo(ticks));Assert.That(s.FoodFor("character-2").Threshold,Is.EqualTo(50));Assert.That(s.Vitals["character-2"].Hp,Is.EqualTo(20));
+        }
+        [UnityTest] public IEnumerator CombatSummaryAndBankHealingDetailsRefreshAfterRealConsumption()
+        {
+            InstallFoodFixture(26);var host=GameSessionHost.Instance;host.Model.Inspect("character-1");host.Model.ConfigureFood(true,50,"cooked-shrimp-item");host.Model.ShowSkill("melee");host.Model.Start("dev-chicken");
+            Button("Inspect Character 1").onClick.Invoke();yield return null;Button("Activities").onClick.Invoke();yield return null;
+            host.Step(3);yield return new WaitForSecondsRealtime(.15f);
+            Assert.That(root.GetComponentsInChildren<Text>().Any(t=>t.text.Contains("Auto-eat ON") && t.text.Contains("50%") && t.text.Contains("×2")),Is.True);
+            Assert.That(host.Runtime.Session.Vitals["character-1"].Hp,Is.EqualTo(33));
+            Button("Bank").onClick.Invoke();yield return null;root.GetComponentsInChildren<Button>().Single(b=>b.name=="Bank item: cooked-shrimp-item").onClick.Invoke();yield return null;
+            Assert.That(root.GetComponentsInChildren<Text>().Any(t=>t.text.Contains("Restores 8 HP")),Is.True);
+        }
     }
 }
