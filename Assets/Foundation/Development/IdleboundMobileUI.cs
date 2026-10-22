@@ -248,7 +248,6 @@ namespace Idlebound.Foundation.Development
                 Bind(Label(body,"",20,Gold), () => SkillText(Model.Skills(id).First(s => s.Id == Model.Character(id).SkillId)));
                 BindProgress(Progress(body), () => (double)Model.Skills(id).First(s => s.Id == Model.Character(id).SkillId).Progress);
             }
-            FoodControls(id);
             Label(body,"SKILLS — tap to choose an activity",20,Gold,32);
             var grid = Grid(body,"Skills");
             foreach (var skill in Model.Skills(id))
@@ -398,7 +397,7 @@ namespace Idlebound.Foundation.Development
                 modalBindings.Add(() => { if (quantity != null) quantity.text = "Shared bank: " + Session.Quantity(id); });
                 var gear = Session.Equipment.Definitions.FirstOrDefault(g => g.Id == id);
                 var food=Session.Foods.Definitions.FirstOrDefault(f=>f.ItemId==id);
-                if(food!=null)Label(content,"Restores "+food.Healing+" HP · Eat from Character Overview.",20,Gold);
+                if(food!=null){BankFoodActions(content,food);return;}
                 if (gear == null) { Label(content,"Materials, products and loot are shared by all characters. Selling and item use are not implemented.",21); return; }
                 Label(content,"Equip for " + Model.Character(Model.InspectedId).Name + " • " + gear.Slot,21);
                 bool equipped = Session.Loadouts[Model.InspectedId].Slots.TryGetValue(gear.Slot,out var worn) && worn.Definition.Id == id;
@@ -423,11 +422,13 @@ namespace Idlebound.Foundation.Development
                 var size = Size(back,48); size.minWidth = size.preferredWidth = 210; size.flexibleWidth = 0;
             }
             Label(body,"SHARED BANK",22,Gold,36);
-            Button(body,"Equipment target: " + Model.Character(Model.InspectedId).Name + " — change", () => Modal("Choose equipment target", content =>
+            Button(body,"Equipment & food: " + Model.Character(Model.InspectedId).Name + " — change", () => Modal("Choose character", content =>
             {
                 foreach (var c in Session.Characters)
                 { string id = c.Id; Button(content,c.DisplayName,() => { Model.SetBankEquipmentTarget(id); CloseModal(); Rebuild(false); }); }
             }));
+            var foodRow=Row(body,64);foodRow.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth=false;
+            var foodSettings=Button(foodRow,"Food settings",FoodSettingsModal,false,64);Size(foodSettings,64).preferredWidth=180;
             var search = SearchBox(body,Model.Search);
             var filters = Row(body,56);
             foreach (BankFilter filter in Enum.GetValues(typeof(BankFilter)))

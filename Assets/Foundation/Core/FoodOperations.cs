@@ -33,13 +33,14 @@ namespace Idlebound.Foundation
     }
     public sealed class FoodSettings
     {
-        public bool Enabled { get; }
+        // Retained for v3/source compatibility; combat auto-eating is always active.
+        public bool Enabled => true;
         public int Threshold { get; }
         public string Preferred { get; }
         public FoodSettings(bool enabled=true,int threshold=50,string preferred="auto")
         {
             if(threshold<10 || threshold>90 || threshold%10!=0 || string.IsNullOrWhiteSpace(preferred))throw new ArgumentException("Food threshold must be 10–90 in ten-point steps.");
-            Enabled=enabled;Threshold=threshold;Preferred=preferred;
+            Threshold=threshold;Preferred=preferred;
         }
     }
     public sealed partial class GatheringSession
@@ -61,16 +62,16 @@ namespace Idlebound.Foundation
             return available.Where(f=>f.Healing>=missing).OrderBy(f=>f.Healing).ThenBy(f=>f.ItemId,StringComparer.Ordinal).FirstOrDefault()
                 ?? available.OrderByDescending(f=>f.Healing).ThenBy(f=>f.ItemId,StringComparer.Ordinal).FirstOrDefault();
         }
-        public bool CanEat(string character)
+        public bool CanEat(string character,string foodId=null)
         {
             if(!vitals.TryGetValue(character??"",out var hp) || hp.Hp<=0 || hp.Hp>=hp.MaxHp || manualEatTicks.TryGetValue(character,out var t)&&t==LastSettledTicks)return false;
-            return ChooseFood(FoodFor(character).Preferred,hp.MaxHp-hp.Hp,inventory)!=null;
+            return ChooseFood(foodId??FoodFor(character).Preferred,hp.MaxHp-hp.Hp,inventory)!=null;
         }
-        public bool EatAt(long ticks,string character,out string error)
+        public bool EatAt(long ticks,string character,out string error,string foodId=null)
         {
             SettleTo(ticks);
-            if(!CanEat(character)){error="Cannot eat: no available preferred food, full HP, dead character or repeated request.";return false;}
-            var hp=vitals[character];var food=ChooseFood(FoodFor(character).Preferred,hp.MaxHp-hp.Hp,inventory);
+            if(!CanEat(character,foodId)){error="Cannot eat: no available preferred food, full HP, dead character or repeated request.";return false;}
+            var hp=vitals[character];var food=ChooseFood(foodId??FoodFor(character).Preferred,hp.MaxHp-hp.Hp,inventory);
             UseFood(food,hp,inventory);manualEatTicks[character]=LastSettledTicks;error=null;return true;
         }
         private static void UseFood(FoodDefinition food,CharacterVitals hp,IDictionary<string,long> bank)
@@ -81,7 +82,7 @@ namespace Idlebound.Foundation
         }
         private void AutoEat(string character,CharacterVitals hp,IDictionary<string,long> bank,OfflineReport receipt)
         {
-            var settings=FoodFor(character);if(!settings.Enabled || hp.Hp<=0)return;
+            var settings=FoodFor(character);if(hp.Hp<=0)return;
             while(hp.Hp<=hp.MaxHp*settings.Threshold/100m)
             {
                 var f=ChooseFood(settings.Preferred,hp.MaxHp-hp.Hp,bank);if(f==null)break;

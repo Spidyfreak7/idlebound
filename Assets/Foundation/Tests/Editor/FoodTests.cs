@@ -38,7 +38,7 @@ namespace Idlebound.Foundation.Tests
         [TestCase(10)][TestCase(20)][TestCase(30)][TestCase(40)][TestCase(50)][TestCase(60)][TestCase(70)][TestCase(80)][TestCase(90)]
         public void AllThresholdsAndSettingsAreIndependentAndPersist(int threshold)
         {
-            var s=Stock();Assert.That(s.FoodFor("character-1").Enabled,Is.True);Assert.That(s.FoodFor("character-1").Threshold,Is.EqualTo(50));Assert.That(s.FoodFor("character-1").Preferred,Is.EqualTo("auto"));Config(s,false,threshold,"cooked-sardine-item");s=GatheringSession.Restore(s.Capture(),s);Assert.That(s.FoodFor("character-1").Threshold,Is.EqualTo(threshold));Assert.That(s.FoodFor("character-1").Enabled,Is.False);Assert.That(s.FoodFor("character-2").Threshold,Is.EqualTo(50));
+            var s=Stock();Assert.That(s.FoodFor("character-1").Enabled,Is.True);Assert.That(s.FoodFor("character-1").Threshold,Is.EqualTo(50));Assert.That(s.FoodFor("character-1").Preferred,Is.EqualTo("auto"));Config(s,false,threshold,"cooked-sardine-item");s=GatheringSession.Restore(s.Capture(),s);Assert.That(s.FoodFor("character-1").Threshold,Is.EqualTo(threshold));Assert.That(s.FoodFor("character-1").Enabled,Is.True);Assert.That(s.FoodFor("character-2").Threshold,Is.EqualTo(50));
         }
         [TestCase(0)][TestCase(5)][TestCase(15)][TestCase(100)] public void InvalidThresholdRejectedBeforeMutation(int threshold)
         {var s=Stock();string before=SaveCodec.Json(s.Capture());Assert.Throws<ArgumentException>(()=>s.ConfigureFoodAt(0,"character-1",true,threshold,"auto",out _));Assert.That(SaveCodec.Json(s.Capture()),Is.EqualTo(before));}
@@ -49,7 +49,7 @@ namespace Idlebound.Foundation.Tests
         }
         [Test] public void ManualEatingWorksOutsideAndInsideCombatAndSameTimestampIsIdempotent()
         {
-            var s=Stock(10);Config(s,false,50,"cooked-shrimp-item");Assert.That(s.EatAt(0,"character-1",out _),Is.True);Assert.That(s.Vitals["character-1"].Hp,Is.EqualTo(18));Assert.That(s.EatAt(0,"character-1",out _),Is.False);Assert.That(s.Quantity("cooked-shrimp-item"),Is.EqualTo(9));
+            var s=Stock(10);Config(s,true,10,"cooked-shrimp-item");Assert.That(s.EatAt(0,"character-1",out _),Is.True);Assert.That(s.Vitals["character-1"].Hp,Is.EqualTo(18));Assert.That(s.EatAt(0,"character-1",out _),Is.False);Assert.That(s.Quantity("cooked-shrimp-item"),Is.EqualTo(9));
             s=GatheringSession.Restore(s.Capture(),s);Assert.That(s.EatAt(0,"character-1",out _),Is.False);Start(s);Assert.That(s.EatAt(T(1),"character-1",out _),Is.True);Assert.That(s.Vitals["character-1"].Hp,Is.EqualTo(26));
         }
         [TestCase(0,10)][TestCase(50,10)][TestCase(20,0)]
@@ -85,8 +85,8 @@ namespace Idlebound.Foundation.Tests
         [TestCase(false,true,1)][TestCase(false,false,0)][TestCase(true,true,0)]
         public void EatingDoesNotChangeCombatXpEligibility(bool offline,bool active,int efficiency)
         {var s=Stock(26,100,0);Start(s);if(!active)s.SelectAt(0,"character-2");s.SettleTo(T(30),offline);decimal damage=s.KillsFor("character-1","dev-chicken")*12+12-s.Encounters["character-1"].EnemyHp;Assert.That(s.Characters[0].Skills.Single(k=>k.SkillId=="melee").StoredXp,Is.EqualTo(damage*3*efficiency));Assert.That(s.Quantity("cooked-shrimp-item"),Is.LessThan(100));}
-        [Test] public void AutoEatOffAndEmptyFoodPreserveNormalDeath()
-        {var off=Stock(20,100,0);Config(off,false);Start(off);off.SettleTo(T(600));Assert.That(off.Vitals["character-1"].Hp,Is.Zero);Assert.That(off.Quantity("cooked-shrimp-item"),Is.EqualTo(100));var empty=Stock(20,0,0);Start(empty);empty.SettleTo(T(600));Assert.That(empty.Vitals["character-1"].Hp,Is.Zero);}
+        [Test] public void AutoEatCannotBeDisabledAndEmptyFoodPreservesNormalDeath()
+        {var off=Stock(20,100,0);Config(off,false);Start(off);off.SettleTo(T(600));Assert.That(off.Vitals["character-1"].Hp,Is.GreaterThan(0));Assert.That(off.Quantity("cooked-shrimp-item"),Is.LessThan(100));var empty=Stock(20,0,0);Start(empty);empty.SettleTo(T(600));Assert.That(empty.Vitals["character-1"].Hp,Is.Zero);}
         [Test] public void WelcomeReportSeparatesConsumedFoodAndSurvivesRestartAndAcknowledgment()
         {
             var dir=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N"));var p=Path.Combine(dir,"player-v3.json");
@@ -156,9 +156,9 @@ namespace Idlebound.Foundation.Tests
             var s=Stock(26,1,0);Start(s);s.SettleTo(T(600),true);var report=s.LastOfflineReport.Characters.Single(c=>c.Character=="character-1");Assert.That(report.Consumed.Single().Quantity,Is.EqualTo(1));Assert.That(report.StopReason,Is.EqualTo("Defeated"));Assert.That(s.Vitals["character-1"].Hp,Is.Zero);
         }
 
-        [Test] public void SettingsChangeSettlesPreviousDisabledStateBeforeEnablingFood()
+        [Test] public void SettingsChangeSettlesPreviousThresholdBeforeApplyingNewThreshold()
         {
-            var s=Stock(26,10,0);Config(s,false);Start(s);Assert.That(s.ConfigureFoodAt(T(3),"character-1",true,50,"cooked-shrimp-item",out _),Is.True);Assert.That(s.Vitals["character-1"].Hp,Is.EqualTo(25));Assert.That(s.Quantity("cooked-shrimp-item"),Is.EqualTo(10));s.SettleTo(T(4));Assert.That(s.Vitals["character-1"].Hp,Is.EqualTo(33));Assert.That(s.Quantity("cooked-shrimp-item"),Is.EqualTo(9));
+            var s=Stock(26,10,0);Config(s,true,10);Start(s);Assert.That(s.ConfigureFoodAt(T(3),"character-1",true,50,"cooked-shrimp-item",out _),Is.True);Assert.That(s.Vitals["character-1"].Hp,Is.EqualTo(25));Assert.That(s.Quantity("cooked-shrimp-item"),Is.EqualTo(10));s.SettleTo(T(4));Assert.That(s.Vitals["character-1"].Hp,Is.EqualTo(33));Assert.That(s.Quantity("cooked-shrimp-item"),Is.EqualTo(9));
         }
         [Test] public void OfflineMagicCanConsumeFoodAndEarnLootWithoutFreeMagicXp()
         {
@@ -193,6 +193,32 @@ namespace Idlebound.Foundation.Tests
         [Test] public void EmptyLiveFoodAndMismatchedSessionCatalogsAreRejected()
         {
             var s=Factory();Assert.Throws<ArgumentException>(()=>FoodCatalog.Load("# empty",s.Production));Assert.Throws<ArgumentException>(()=>new GatheringSession(s.Catalog,s.Curve,foods:s.Foods));
+        }
+
+        [Test] public void PreviouslyDisabledV3LoadsEnabledWithoutResettingPreferencesOrProgress()
+        {
+            var dir=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N"));var path=Path.Combine(dir,"player-v3.json");
+            try{
+                var snapshot=Stock(30,5,0).Capture();snapshot.Characters[0].Food.Enabled=false;snapshot.Characters[0].Food.Threshold=70;snapshot.Characters[0].Food.Preferred="cooked-shrimp-item";
+                new AtomicLocalSaveStore(path,version:3).Write(new SaveDocument{Catalog="unchanged-v3",UtcTicks=Epoch,State=snapshot});
+                var game=new LocalGame(new AtomicLocalSaveStore(path,version:3),()=>Factory(),"unchanged-v3");game.Open(Epoch);
+                Assert.That(game.Session.FoodFor("character-1").Enabled,Is.True);var normalized=game.Session.Capture();snapshot.Characters[0].Food.Enabled=true;Assert.That(SaveCodec.Json(normalized),Is.EqualTo(SaveCodec.Json(snapshot)));
+                Start(game.Session);Assert.That(game.Session.Vitals["character-1"].Hp,Is.EqualTo(38));Assert.That(game.Session.Quantity("cooked-shrimp-item"),Is.EqualTo(4));
+                var saved=SaveCodec.Decode(File.ReadAllText(path),3);Assert.That(saved.Catalog,Is.EqualTo("unchanged-v3"));Assert.That(saved.State.Characters[0].Food.Enabled,Is.True);
+            }finally{if(Directory.Exists(dir))Directory.Delete(dir,true);}
+        }
+        [Test] public void ExplicitBankItemEatingDoesNotChangePreferenceAndCannotDuplicateAtSameTimestamp()
+        {
+            var s=Stock();Config(s,true,50,"cooked-sardine-item");string initial=SaveCodec.Json(s.Capture());Assert.That(s.EatAt(0,"character-1",out _,"fish-1"),Is.False);Assert.That(SaveCodec.Json(s.Capture()),Is.EqualTo(initial));Assert.That(s.EatAt(0,"character-1",out _,"cooked-shrimp-item"),Is.True);
+            Assert.That(s.Vitals["character-1"].Hp,Is.EqualTo(28));Assert.That(s.Quantity("cooked-shrimp-item"),Is.EqualTo(9));Assert.That(s.Quantity("cooked-sardine-item"),Is.EqualTo(10));Assert.That(s.FoodFor("character-1").Preferred,Is.EqualTo("cooked-sardine-item"));
+            Assert.That(s.EatAt(0,"character-1",out _,"cooked-sardine-item"),Is.False);string before=SaveCodec.Json(s.Capture());Assert.That(s.EatAt(0,"character-1",out _,"fish-1"),Is.False);Assert.That(SaveCodec.Json(s.Capture()),Is.EqualTo(before));
+            s=Stock(20,0,10);Assert.That(s.EatAt(0,"character-1",out _,"cooked-shrimp-item"),Is.False);Assert.That(s.Quantity("cooked-sardine-item"),Is.EqualTo(10));Assert.That(s.Vitals["character-1"].Hp,Is.EqualTo(20));
+        }
+        [Test] public void BankFoodTargetIsIndependentAndReturnRestoresCharacterTabSkillAndScroll()
+        {
+            var session=Stock();var model=new GameUiModel(new SessionRuntime(session,new object()));model.Inspect("character-1");model.ShowSkill("cooking");model.Navigate(MainScreen.Bank,.42f);model.SetBankEquipmentTarget("character-2");
+            Assert.That(model.ConfigureFood(false,80,"cooked-shrimp-item"),Is.True);Assert.That(model.Eat("cooked-shrimp-item"),Is.True);Assert.That(session.FoodFor("character-2").Enabled,Is.True);Assert.That(session.FoodFor("character-1").Threshold,Is.EqualTo(50));Assert.That(session.Vitals["character-2"].Hp,Is.EqualTo(28));
+            Assert.That(model.ReturnFromBank(),Is.True);Assert.That(model.InspectedId,Is.EqualTo("character-1"));Assert.That(model.CharacterTab,Is.EqualTo(CharacterScreen.Activities));Assert.That(model.SkillFilter,Is.EqualTo("cooking"));Assert.That(model.CharacterScrollPosition,Is.EqualTo(.42f));Assert.That(session.ActiveCharacterId,Is.EqualTo("character-1"));Assert.That(session.LastSettledTicks,Is.Zero);Assert.That(session.Assignments,Is.Empty);
         }
     }
 }

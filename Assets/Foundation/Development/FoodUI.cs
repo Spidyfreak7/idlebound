@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using UnityEngine;
 using UnityEngine.UI;
 using static Idlebound.Foundation.Development.MobileUiKit;
 namespace Idlebound.Foundation.Development
@@ -9,34 +10,59 @@ namespace Idlebound.Foundation.Development
         private string FoodSummary(string id)
         {
             var s=Session.FoodFor(id);
-            var choices=Session.Foods.Definitions.Where(f=>s.Preferred=="auto" || f.ItemId==s.Preferred).ToArray();
-            return "Auto-eat "+(s.Enabled?"ON":"OFF")+" · At/below "+s.Threshold+"% HP · "+(s.Preferred=="auto"?"Auto · ":"")+
-                string.Join(" · ",choices.Select(f=>PlayerNames.Display(Session.BankItems[f.ItemId])+" ×"+Session.Quantity(f.ItemId)))+
-                (choices.All(f=>Session.Quantity(f.ItemId)==0)?" · Food unavailable":"");
+            var choices=Session.Foods.Definitions.Where(f=>s.Preferred=="auto" || f.ItemId==s.Preferred);
+            return "Auto-eat always active · At/below "+s.Threshold+"% HP · "+
+                string.Join(" · ",choices.Select(f=>PlayerNames.Display(Session.BankItems[f.ItemId])+" ×"+Session.Quantity(f.ItemId)));
         }
-        private void FoodControls(string id)
+        private void FoodModalText(Transform parent,Func<string> value)
         {
-            var card=Card(body);card.name="Food controls";
-            Bind(Label(card,"",20,Gold),()=>"HP "+Session.Vitals[id].Hp+" / "+Session.Vitals[id].MaxHp);
-            Bind(Label(card,"",18,Muted),()=>FoodSummary(id));
-            var row=Row(card,64);
-            var toggle=Button(row,"",()=>{var s=Session.FoodFor(id);Act(()=>Model.ConfigureFood(!s.Enabled,s.Threshold,s.Preferred));},false,64);
-            Bind(toggle.GetComponentInChildren<Text>(),()=>"Auto-eat "+(Session.FoodFor(id).Enabled?"ON":"OFF"));
-            Button(row,"Threshold",()=>Modal("Auto-eat HP threshold",content=>
-            {
-                for(int n=10;n<=90;n+=10){int threshold=n;Button(content,n+"% HP",()=>{var s=Session.FoodFor(id);CloseModal();Act(()=>Model.ConfigureFood(s.Enabled,threshold,s.Preferred));});}
-            }),false,64);
-            var options=Row(card,64);
-            Button(options,"Food preference",()=>Modal("Preferred food",content=>
-            {
-                Button(content,"Auto — least adequate, otherwise strongest",()=>SetFoodPreference("auto"));
-                foreach(var f in Session.Foods.Definitions){string key=f.ItemId;Button(content,PlayerNames.Display(Session.BankItems[key])+" · "+f.Healing+" HP",()=>SetFoodPreference(key));}
-            }),false,64);
-            var eat=Button(options,"Eat",()=>Act(()=>Model.Eat()),false,64);eat.name="Manual Eat";
-            eat.interactable=Session.CanEat(id);bindings.Add(()=>{if(eat!=null)eat.interactable=Session.CanEat(id);});
-            Bind(Label(card,"",17,Muted),()=>Session.Vitals[id].Hp<=0?"Defeated — food cannot revive this character.":Session.Vitals[id].Hp>=Session.Vitals[id].MaxHp?"Full HP":"Eating consumes one shared-bank serving; no XP.");
+            var text=Label(parent,value(),20);
+            modalBindings.Add(()=>{if(text!=null)text.text=value();});
         }
-        private void SetFoodPreference(string preference)
-        {var s=Session.FoodFor(Model.InspectedId);CloseModal();Act(()=>Model.ConfigureFood(s.Enabled,s.Threshold,preference));}
+        private string FoodPreferenceName(string id)=>Session.FoodFor(id).Preferred=="auto"?"Auto":PlayerNames.Display(Session.BankItems[Session.FoodFor(id).Preferred]);
+        private void FoodSettingsModal()
+        {
+            string id=Model.InspectedId;
+            Modal("Food settings · "+Model.Character(id).Name,content=>
+            {
+                Label(content,"Auto-eating is always active in combat.",20,Gold);
+                FoodModalText(content,()=>"Preferred food: "+FoodPreferenceName(id)+" · Threshold: "+Session.FoodFor(id).Threshold+"% HP");
+                Button(content,"Change HP threshold",()=>Modal("HP threshold · "+Model.Character(id).Name,options=>
+                {
+                    for(int n=10;n<=90;n+=10)
+                    {int threshold=n;Button(options,n+"% HP",()=>{CloseModal();Act(()=>Model.ConfigureFood(true,threshold,Session.FoodFor(id).Preferred));FoodSettingsModal();});}
+                }));
+                Button(content,"Auto",()=>SetBankFoodPreference("auto"));
+                foreach(var food in Session.Foods.Definitions)
+                {
+                    string key=food.ItemId;
+                    FoodModalText(content,()=>PlayerNames.Display(Session.BankItems[key])+" ×"+Session.Quantity(key)+" · "+food.Healing+" HP");
+                    Button(content,PlayerNames.Display(Session.BankItems[key]),()=>SetBankFoodPreference(key));
+                }
+            });
+        }
+        private void SetBankFoodPreference(string preference)
+        {
+            var s=Session.FoodFor(Model.InspectedId);CloseModal();Act(()=>Model.ConfigureFood(true,s.Threshold,preference));FoodSettingsModal();
+        }
+        private void BankFoodActions(Transform content,FoodDefinition food)
+        {
+            string id=Model.InspectedId,key=food.ItemId;
+            Label(content,"Restores "+food.Healing+" HP",20,Gold);
+            FoodModalText(content,()=>"For "+Model.Character(id).Name+" · HP "+Session.Vitals[id].Hp+" / "+Session.Vitals[id].MaxHp);
+            Button eat=null;
+            eat=Button(content,"Eat",()=>{Act(()=>Model.Eat(key));eat.interactable=Session.CanEat(id,key);});
+            eat.interactable=Session.CanEat(id,key);
+            modalBindings.Add(()=>{if(eat!=null)eat.interactable=Session.CanEat(id,key);});
+            var prefer=Button(content,"Set as preferred food",()=>Act(()=>Model.ConfigureFood(true,Session.FoodFor(id).Threshold,key)));
+            Action refresh=()=>
+            {
+                if(prefer==null)return;bool selected=Session.FoodFor(id).Preferred==key;
+                prefer.GetComponentInChildren<Text>().text=selected?"Already preferred":"Set as preferred food";
+                prefer.interactable=!selected;
+            };
+            refresh();modalBindings.Add(refresh);
+            Label(content,"Auto-eating is always active. Eating uses one shared-bank serving and grants no XP.",18,Muted);
+        }
     }
 }

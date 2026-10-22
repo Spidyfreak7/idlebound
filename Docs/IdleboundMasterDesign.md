@@ -13,6 +13,10 @@ This register reconciles all four uploaded handoffs, read completely for Stage 8
 
 Original PDFs/workbook were not supplied here. S2's positive tables supply values that S1/S3/S4 say were unavailable; those absence statements are not explicit rejections of S2. Every source table is preserved verbatim in the archival annex below. Status words inside those excerpts retain the source author's claim and do not override this reconciliation.
 
+## Stage 8B-08A — later food UX authority
+
+The explicit Stage 8B-08A request supersedes the food OFF option and Overview controls: combat auto-eating is always active, including legacy disabled v3 settings; Bank owns per-character thresholds/preferences and explicit item Eat actions. Food values, selection algorithm, save version/fingerprints, chronological settlement and XP/death rules remain unchanged. See `Stage8B08AVerification.md`.
+
 ## Stage 8B-08 — later explicit food authority
 
 The user's Stage 8B-08 handoff approves shared-bank food consumption and independent default-ON auto-eating (50%, configurable 10–90 by tens, Auto/shrimp/sardine preference). Cooked shrimp 8 HP and sardine 12 HP are **new provisional playtest values**, referencing existing Cooking outputs. Eating grants no XP, cannot revive and cannot borrow future Cooking outputs. Actual food use is separate from offline rewards. Earlier archived food/recovery gaps below are historical; final death recovery remains unresolved. `Stage8B08Verification.md` records the minimal-overheal Auto interpretation, deterministic ties, v3 migration, verification and deferred systems. No other recipes/combat/enchant balance changes are approved by this update.
