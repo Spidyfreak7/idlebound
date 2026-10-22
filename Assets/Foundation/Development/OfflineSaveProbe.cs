@@ -38,14 +38,14 @@ namespace Idlebound.Foundation.Development
         private static void Prepare(long away)
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) { Debug.LogWarning("Stop Play mode before starting an offline probe."); return; }
-            string source = Path.Combine(Application.persistentDataPath,"Idlebound","player-v2.json");
+            string source = Path.Combine(Application.persistentDataPath,"Idlebound","player-v3.json");
             try
             {
                 if (!File.Exists(source)) throw new InvalidOperationException("Create and close a normal local player session first.");
-                var copy = SaveCodec.Decode(File.ReadAllText(source),2);
+                var copy = SaveCodec.Decode(File.ReadAllText(source),3);
                 long now = DateTime.UtcNow.Ticks; copy.UtcTicks = now; copy.Pending = null;
                 string directory = Path.Combine(Application.temporaryCachePath,"IdleboundOfflineProbe-" + Guid.NewGuid().ToString("N"));
-                new AtomicLocalSaveStore(Path.Combine(directory,"player-v2.json"),version:2).Write(copy);
+                new AtomicLocalSaveStore(Path.Combine(directory,"player-v3.json"),version:3).Write(copy);
                 SessionState.SetString(PathKey,directory); SessionState.SetString(ClockKey,checked(now + away).ToString(CultureInfo.InvariantCulture));
                 Debug.Log("Idlebound offline probe uses isolated copy: " + directory + ". Original player save is untouched.");
                 EditorApplication.isPlaying = true;

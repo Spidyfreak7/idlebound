@@ -248,6 +248,7 @@ namespace Idlebound.Foundation.Development
                 Bind(Label(body,"",20,Gold), () => SkillText(Model.Skills(id).First(s => s.Id == Model.Character(id).SkillId)));
                 BindProgress(Progress(body), () => (double)Model.Skills(id).First(s => s.Id == Model.Character(id).SkillId).Progress);
             }
+            FoodControls(id);
             Label(body,"SKILLS — tap to choose an activity",20,Gold,32);
             var grid = Grid(body,"Skills");
             foreach (var skill in Model.Skills(id))
@@ -319,6 +320,7 @@ namespace Idlebound.Foundation.Development
         }
         private void CombatDetails(Transform parent,string id)
         {
+            Bind(Label(parent,"",18,Muted),()=>FoodSummary(id));
             Bind(Label(parent,"",18,Muted), () => Session.Encounters.TryGetValue(id,out var fight)
                 ? "HP " + Session.Vitals[id].Hp + "/" + Session.Vitals[id].MaxHp + " · Enemy " + fight.EnemyHp + " HP"
                 : "Combat stopped");
@@ -395,6 +397,8 @@ namespace Idlebound.Foundation.Development
                 Icon(content,id,80); var quantity = Label(content,"Shared bank: " + Session.Quantity(id),23,Gold);
                 modalBindings.Add(() => { if (quantity != null) quantity.text = "Shared bank: " + Session.Quantity(id); });
                 var gear = Session.Equipment.Definitions.FirstOrDefault(g => g.Id == id);
+                var food=Session.Foods.Definitions.FirstOrDefault(f=>f.ItemId==id);
+                if(food!=null)Label(content,"Restores "+food.Healing+" HP · Eat from Character Overview.",20,Gold);
                 if (gear == null) { Label(content,"Materials, products and loot are shared by all characters. Selling and item use are not implemented.",21); return; }
                 Label(content,"Equip for " + Model.Character(Model.InspectedId).Name + " • " + gear.Slot,21);
                 bool equipped = Session.Loadouts[Model.InspectedId].Slots.TryGetValue(gear.Slot,out var worn) && worn.Definition.Id == id;
@@ -521,6 +525,7 @@ namespace Idlebound.Foundation.Development
                     string character = Session.Characters.First(x => x.Id == c.Character).DisplayName;
                     string activity = c.Activity == null ? "Unassigned" : PlayerNames.Display(Session.Activities.First(a => a.Id == c.Activity).DisplayName);
                     Label(card,character + " — " + activity,21,Gold);
+                    if(c.Consumed!=null)foreach(var food in c.Consumed)Label(card,"Used "+food.Quantity+" "+PlayerNames.Display(Session.BankItems[food.Id])+" (food consumed)",20,Muted);
                     foreach (var item in c.Items) Label(card,"+" + item.Quantity + " " + PlayerNames.Display(Session.BankItems[item.Id]),20);
                     foreach (var xp in c.Xp) Label(card,"+" + xp.Quantity.ToString("0.##") + " " + Session.Skills.First(k => k.Id == xp.Skill).DisplayName + " XP",19);
                     if (c.Xp.Count == 0) Label(card,"0 XP",18,Muted);
