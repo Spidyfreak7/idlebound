@@ -9,7 +9,7 @@ using static Idlebound.Foundation.Development.MobileUiKit;
 
 namespace Idlebound.Foundation.Development
 {
-    public sealed class IdleboundMobileUI : MonoBehaviour
+    public sealed partial class IdleboundMobileUI : MonoBehaviour
     {
         [SerializeField] private Sprite adventurerSprite;
         [SerializeField] private Sprite enemySprite;
@@ -273,6 +273,7 @@ namespace Idlebound.Foundation.Development
                     foreach (var skill in Session.Skills)
                     { var key = skill.Id; Button(content,skill.DisplayName,() => { Model.ShowSkill(key); CloseModal(); Rebuild(true); }); }
                 }));
+            if(Model.SkillFilter=="magic") EnchantingActivity();
             foreach (var item in Model.Activities())
             {
                 var a = item; var card = Card(body); card.name = "Activity card: " + a.Id;
@@ -333,6 +334,7 @@ namespace Idlebound.Foundation.Development
         {
             string id = Model.InspectedId;
             var profile = Label(body,"",18); Bind(profile, () => { var p = Session.Profile(id); return p.Style + " • Damage " + p.Damage + " • Defense " + p.Defense + " • " + GameUiModel.Seconds(p.IntervalTicks) + "s / attack"; });
+            Bind(Label(body,"",18,Gold),()=>EquipmentBonuses(id));
             equipmentPanel = Node("Ten-slot loadout",body); Size(equipmentPanel,EquipmentLayout.Height); Surface(equipmentPanel,Panel);
             equipmentHero = Node("Character",equipmentPanel);
             var image = equipmentHero.gameObject.AddComponent<Image>(); image.sprite = adventurerSprite != null ? adventurerSprite : PixelArtwork.Icon("hero"); image.preserveAspect = true; image.raycastTarget = false;
@@ -374,6 +376,7 @@ namespace Idlebound.Foundation.Development
                 {
                     Label(content,"Equipped: " + PlayerNames.Display(current.Definition.Name),22,Gold);
                     Label(content,Requirements(current.Definition),20,Muted); Label(content,"Instance " + current.InstanceId,17,Muted);
+                    Label(content,EnchantName(current),20,Gold);
                     Button(content,"Inspect equipped item",() => ItemDetails(current.Definition.Id));
                     Button(content,"Unequip to bank",() => { CloseModal(); Act(() => Model.Unequip(slot)); });
                 }
@@ -402,6 +405,8 @@ namespace Idlebound.Foundation.Development
                 foreach (var change in Model.Compare(id)) Label(content,change.Name + "  " + change.Before + " → " + change.After,22,change.Improvement ? Good : Bad);
                 var current = Session.Profile(Model.InspectedId);
                 if (gear.Style.HasValue && gear.Style.Value != current.Style) Label(content,"Style  " + current.Style + " → " + gear.Style,21,Gold);
+                foreach(var instance in Session.BankEquipmentInstances.Values.Where(i=>i.Definition.Id==id))
+                {var key=instance.InstanceId;Label(content,key+" · "+EnchantName(instance)+(Session.IsItemLocked(key)?" · Enchanting (locked)":""),18,Gold);Button(content,"Equip "+key,()=>{CloseModal();Act(()=>Model.EquipInstance(key));}).interactable=!Session.IsItemLocked(key);}
                 Button(content,"Equip / replace",() => { CloseModal(); Act(() => Model.Equip(id)); }).interactable = Session.Quantity(id) > 0;
             });
         }
@@ -484,8 +489,8 @@ namespace Idlebound.Foundation.Development
                     }));
             }
         }
-        private void Confirm(string title,string message,Action accept)
-        { Modal(title,content => { Label(content,message,22); Button(content,"Confirm Swap Assignment",() => { CloseModal(); accept(); }); }); }
+        private void Confirm(string title,string message,Action accept,string actionLabel="Confirm Swap Assignment")
+        { Modal(title,content => { Label(content,message,22); Button(content,actionLabel,() => { CloseModal(); accept(); }); }); }
         private void Modal(string title,Action<RectTransform> build,bool dismissible = true)
         {
             modalBindings.Clear(); Clear(modalLayer); modalLayer.gameObject.SetActive(true);
@@ -509,7 +514,7 @@ namespace Idlebound.Foundation.Development
             Modal("WELCOME BACK!",content =>
             {
                 Label(content,(report.Intervals > 1 ? "Away across " + report.Intervals + " visits: " : "Away: ") + AwayTime(report.AwayTicks) + "\nOffline progress: " + AwayTime(report.EligibleTicks),22,Gold);
-                if (report.Capped) Label(content,"Offline limit reached · 4h maximum per absence",18,Muted);
+                if (report.Capped) Label(content,"Offline limit reached · 4–7h per character, based on equipped bonuses",18,Muted);
                 foreach (var c in report.Characters)
                 {
                     var card = Card(content);

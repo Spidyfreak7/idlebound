@@ -56,10 +56,14 @@ namespace Idlebound.Foundation.Development
             try
             {
                 var template = Catalogs(false,false);
-                Func<GatheringSession> factory = () => new GatheringSession(template.Catalog,template.Curve,template.Production,true,template.Equipment,template.Combat);
-                string catalog = SaveCodec.Hash(string.Join("\n",new[] { "Idlebound-live-v1", Data("ResourceTiers"),Data("GatheringXp"),Data("ProductionXpCurve"),Data("StarterProductionRecipes"),Data("DevelopmentGear"),Data("DevelopmentCombatRules"),Data("DevelopmentMonsters"),Data("DevelopmentLoot") }));
-                var path = Path.Combine(tests?.Directory ?? Path.Combine(Application.persistentDataPath,"Idlebound"),"player-v1.json");
-                local = new LocalGame(new AtomicLocalSaveStore(path),factory,catalog);
+                Func<GatheringSession> factory = () => new GatheringSession(template.Catalog,template.Curve,template.Production,true,template.Equipment,template.Combat,enchantments:template.Enchantments);
+                string catalog = SaveCodec.Hash(string.Join("\n",new[] { "Idlebound-live-v1", Data("ResourceTiers").Replace("\r\n","\n"),Data("GatheringXp").Replace("\r\n","\n"),Data("ProductionXpCurve").Replace("\r\n","\n"),Data("StarterProductionRecipes").Replace("\r\n","\n"),Data("DevelopmentGear").Replace("\r\n","\n"),Data("DevelopmentCombatRules").Replace("\r\n","\n"),Data("DevelopmentMonsters").Replace("\r\n","\n"),Data("DevelopmentLoot").Replace("\r\n","\n") }));
+                if(catalog!="8ffe4a43d52f9cd90751176ecfb45e19ec3500129fb139bdc15a71ba801c445a") throw new SaveCompatibilityException("Legacy catalog identity changed; migration requires review.");
+                var legacyTemplate=new GatheringSession(template.Catalog,template.Curve,template.Production,true,template.Equipment,template.Combat);
+                string currentCatalog=SaveCodec.Hash("Idlebound-live-v2\n"+catalog+"\n"+Data("Enchantments").Replace("\r\n","\n")+"\n"+Data("EnchantmentRules").Replace("\r\n","\n"));
+                var directory=tests?.Directory ?? Path.Combine(Application.persistentDataPath,"Idlebound");
+                Func<GatheringSession> legacyFactory=()=>new GatheringSession(legacyTemplate.Catalog,legacyTemplate.Curve,legacyTemplate.Production,true,legacyTemplate.Equipment,legacyTemplate.Combat);
+                local = new LocalGame(new MigratingLocalSaveStore(directory,legacyFactory,catalog,currentCatalog,compatibleLegacyCatalogs:new[]{catalog,"175f0663b565aa2cd019a877dcce34313f66314d8813a03eb3fb59a6b60a2e26"}),factory,currentCatalog);
                 StartCoroutine(LoadOrResume(true));
             }
             catch (Exception error)
@@ -79,7 +83,7 @@ namespace Idlebound.Foundation.Development
             var gathering = fixture ? GatheringCatalog.Load(Data("ResourceTiers"),true) : GatheringCatalog.LoadProduction(Data("ResourceTiers"),Data("GatheringXp"));
             var production = ProductionCatalog.Load(Data("StarterProductionRecipes") + "\n" + (recipes ? Data("DevelopmentProductionRecipes") : ""),gathering.Resources,recipes);
             return new GatheringSession(gathering,XpCurve.Load(Data(fixture ? "KnownXpMilestones" : "ProductionXpCurve"),fixture),production,true,
-                EquipmentCatalog.LoadDevelopment(Data("DevelopmentGear")),CombatCatalog.LoadDevelopment(Data("DevelopmentCombatRules"),Data("DevelopmentMonsters"),Data("DevelopmentLoot")));
+                EquipmentCatalog.LoadDevelopment(Data("DevelopmentGear")),CombatCatalog.LoadDevelopment(Data("DevelopmentCombatRules"),Data("DevelopmentMonsters"),Data("DevelopmentLoot")),enchantments:EnchantmentCatalog.Load(Data("Enchantments"),Data("EnchantmentRules"),gathering.Resources));
         }
         private void InstallNew(bool fixture, bool recipes)
         {
