@@ -33,7 +33,8 @@ namespace Idlebound.Foundation
         public bool HasMatchingSet(string character) => EquipmentSlots.EnchantmentSetSlots.All(s=>loadouts[character].Items.ContainsKey(s)) &&
             EquipmentSlots.EnchantmentSetSlots.Select(s=>loadouts[character].Items[s].PermanentEnchantmentId).Distinct().Count()==1 && loadouts[character].Items[EquipmentSlot.Head].PermanentEnchantmentId!=null;
         public long OfflineAllowance(string character) => Math.Min(7L*TimeSpan.TicksPerHour,checked((long)(BaseOfflineTicks*(1+Bonus(character,EnchantmentType.OfflineDuration)))));
-        private long Eligible(string character,long elapsed,bool offline) => offline?Math.Min(elapsed,OfflineAllowance(character)):elapsed;
+        private Dictionary<string,long> eligibilityOverride;
+        private long Eligible(string character,long elapsed,bool offline) => eligibilityOverride!=null?Math.Min(elapsed,eligibilityOverride[character]):offline?Math.Min(elapsed,OfflineAllowance(character)):elapsed;
         public long EffectiveDuration(string character,ActivityDefinition a)
         {
             if(!Enum.TryParse(a.SkillId+"Speed",true,out EnchantmentType type) || !Enum.IsDefined(typeof(EnchantmentType),type)) return a.DurationTicks;

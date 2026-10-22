@@ -29,10 +29,18 @@ namespace Idlebound.Foundation
         [DataMember(IsRequired = true)] public SavedSkill[] Skills;
         [DataMember(IsRequired = true)] public long Partial, Cycles;
         [DataMember(IsRequired = true)] public decimal Hp;
+        [DataMember] public SavedFood Food;
         [DataMember] public SavedEnchant Enchant;
         [DataMember] public long Attacks, Regen;
         [DataMember(IsRequired = true)] public SavedEncounter Encounter;
         [DataMember(IsRequired = true)] public SavedEffect[] Effects;
+    }
+    [DataContract] public sealed class SavedFood
+    {
+        [DataMember(IsRequired=true)] public bool Enabled;
+        [DataMember(IsRequired=true)] public int Threshold;
+        [DataMember(IsRequired=true)] public string Preferred;
+        [DataMember(IsRequired=true)] public long LastManualTicks;
     }
     [DataContract] public sealed class SavedEnchant
     {
@@ -81,6 +89,12 @@ namespace Idlebound.Foundation
         [DataMember(IsRequired = true)] public string Character, Activity, StopReason;
         [DataMember(IsRequired = true)] public List<ItemAmount> Items = new List<ItemAmount>();
         [DataMember(IsRequired = true)] public List<XpAmount> Xp = new List<XpAmount>();
+        [DataMember] public List<ItemAmount> Consumed;
+        public void Consume(string id,long count)
+        {
+            if(Consumed==null)Consumed=new List<ItemAmount>();var item=Consumed.Find(i=>i.Id==id);
+            if(item==null)Consumed.Add(new ItemAmount{Id=id,Quantity=count});else item.Quantity=checked(item.Quantity+count);
+        }
         public void Item(string id, long count)
         {
             if (count <= 0) return;
@@ -117,6 +131,7 @@ namespace Idlebound.Foundation
             {
                 var target = For(c.Character,c.Activity);
                 foreach (var item in c.Items) target.Item(item.Id,item.Quantity);
+                if(c.Consumed!=null)foreach(var food in c.Consumed)target.Consume(food.Id,food.Quantity);
                 foreach (var xp in c.Xp) target.Award(xp.Skill,xp.Quantity);
                 if (c.StopReason != null) target.StopReason = c.StopReason;
             }

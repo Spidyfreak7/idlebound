@@ -29,7 +29,7 @@ namespace Idlebound.Foundation
         public bool RefundCancelledInputs { get; }
 
         public GatheringSession(GatheringCatalog catalog, XpCurve curve, ProductionCatalog production = null, bool? refundCancelledInputs = null,
-            EquipmentCatalog equipment = null, CombatCatalog combat = null, IDeterministicLootRoller random = null, EnchantmentCatalog enchantments = null)
+            EquipmentCatalog equipment = null, CombatCatalog combat = null, IDeterministicLootRoller random = null, EnchantmentCatalog enchantments = null, FoodCatalog foods = null)
         {
             Catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             this.curve = curve ?? throw new ArgumentNullException(nameof(curve));
@@ -43,6 +43,8 @@ namespace Idlebound.Foundation
                 catalog.Resources.Any(r => !Production.ItemNames.TryGetValue(r.Id, out var name) || name != r.DisplayName) ||
                 Production.Recipes.Any(r => catalog.Resources.Any(raw => raw.Id == r.OutputId)))
                 throw new ArgumentException("Production catalog does not match session resource definitions.");
+            Foods=foods ?? new FoodCatalog(Array.Empty<FoodDefinition>(),Production);
+            if(Foods.Definitions.Any(f=>!Production.Recipes.Any(p=>p.SkillId=="cooking" && p.OutputId==f.ItemId)))throw new ArgumentException("Food catalog does not match session Cooking outputs.");
             Equipment = equipment ?? EquipmentCatalog.Empty;
             Enchantments = enchantments ?? EnchantmentCatalog.Empty;
             Combat = combat ?? CombatCatalog.Empty;
@@ -61,6 +63,7 @@ namespace Idlebound.Foundation
                     state.Skills.Select(s => new SkillState(s.Id, 1, 0))));
             foreach (var character in Characters)
             {
+                foodSettings.Add(character.Id,new FoodSettings());
                 loadouts.Add(character.Id, new CharacterEquipment());
                 vitals.Add(character.Id, new CharacterVitals(Combat.Rules.PlayerMaxHp, Combat.Rules.PlayerMaxHp));
             }
@@ -101,6 +104,16 @@ namespace Idlebound.Foundation
         }
 
         public void SettleTo(long absoluteTicks, bool offline = false)
+        {
+            if(Foods.Definitions.Count>0 && encounters.Count>0 && absoluteTicks>LastSettledTicks)
+            {
+                if(absoluteTicks-LastSettledTicks<NextFoodEvent())SettleBatch(absoluteTicks,offline);
+                else SettleChronologically(absoluteTicks,offline);
+                return;
+            }
+            SettleBatch(absoluteTicks,offline);
+        }
+        private void SettleBatch(long absoluteTicks, bool offline)
         {
             if (absoluteTicks < LastSettledTicks) throw new ArgumentOutOfRangeException(nameof(absoluteTicks), "Clock rewind rejected.");
             long elapsed = absoluteTicks - LastSettledTicks;

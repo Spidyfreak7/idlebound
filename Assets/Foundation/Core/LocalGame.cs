@@ -15,7 +15,7 @@ namespace Idlebound.Foundation
         private SaveDocument document;
         public GatheringSession Session { get; private set; }
         public OfflineReport Pending => document?.Pending == null ? null : SaveCodec.Copy(document.Pending);
-        public string RecoveryDiagnostic => (store as AtomicLocalSaveStore)?.Diagnostic ?? (store as MigratingLocalSaveStore)?.Diagnostic;
+        public string RecoveryDiagnostic => (store as AtomicLocalSaveStore)?.Diagnostic ?? (store as MigratingLocalSaveStore)?.Diagnostic ?? (store as FoodSaveMigration)?.Diagnostic;
         public long BoundaryUtcTicks => document?.UtcTicks ?? 0;
         public LocalGame(ILocalSaveStore store, Func<GatheringSession> factory, string catalog)
         { this.store = store ?? throw new ArgumentNullException(nameof(store)); this.factory = factory ?? throw new ArgumentNullException(nameof(factory)); this.catalog = catalog ?? throw new ArgumentNullException(nameof(catalog)); }
@@ -33,6 +33,7 @@ namespace Idlebound.Foundation
                 if (c == null || !session.Characters.Any(x => x.Id == c.Character) || c.Activity != null && !session.Activities.Any(a => a.Id == c.Activity) || c.Items == null || c.Xp == null)
                     throw new ArgumentException("Invalid report attribution reference.");
                 if (c.StopReason != null && c.StopReason != "Defeated" && c.StopReason != "Job completed" && c.StopReason != "Out of materials") throw new ArgumentException("Unknown report stop reason.");
+                if(c.Consumed!=null && (c.Consumed.Any(i=>i==null || i.Quantity<=0 || !session.Foods.Definitions.Any(f=>f.ItemId==i.Id)) || c.Consumed.Select(i=>i.Id).Distinct().Count()!=c.Consumed.Count))throw new ArgumentException("Invalid food consumption receipt.");
                 if (c.Items.Any(i => i == null || i.Quantity <= 0 || i.Id == null || !session.BankItems.ContainsKey(i.Id)) || c.Items.Select(i => i.Id).Distinct().Count() != c.Items.Count ||
                     c.Xp.Any(x => x == null || x.Quantity <= 0 || !session.Skills.Any(s => s.Id == x.Skill)) || c.Xp.Select(x => x.Skill).Distinct().Count() != c.Xp.Count)
                     throw new ArgumentException("Invalid report rewards.");

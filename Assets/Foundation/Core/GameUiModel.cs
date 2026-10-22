@@ -222,6 +222,10 @@ namespace Idlebound.Foundation
             bool ok=Session.EquipAt(Session.LastSettledTicks,InspectedId,item.Definition.Id,item.Definition.Slot,out var error,instance);
             return Result(ok,error,"Equipment changed.");
         }
+        public bool ConfigureFood(bool enabled,int threshold,string preferred)
+        {bool ok=Session.ConfigureFoodAt(Session.LastSettledTicks,InspectedId,enabled,threshold,preferred,out var error);return Result(ok,error,"Food settings updated.");}
+        public bool Eat()
+        {bool ok=Session.EatAt(Session.LastSettledTicks,InspectedId,out var error);return Result(ok,error,"Ate one serving.");}
         public bool Stop() => Result(Session.UnassignAt(Session.LastSettledTicks, InspectedId), "No current assignment.", "Stopped. Unfinished production inputs returned.");
         public bool Equip(string itemId)
         {

@@ -21,6 +21,7 @@ namespace Idlebound.Foundation
                     Hp = vitals[c.Id].Hp, Partial = PartialTicks(c.Id), Cycles = CompletedCycles(c.Id),
                     Encounter = encounters.TryGetValue(c.Id,out var f) ? new SavedEncounter
                         { Monster = f.MonsterId, Hp = f.EnemyHp, PlayerTicks = f.PlayerRemainingTicks, EnemyTicks = f.EnemyRemainingTicks } : null,
+                    Food=Foods.Definitions.Count==0?null:new SavedFood{Enabled=FoodFor(c.Id).Enabled,Threshold=FoodFor(c.Id).Threshold,Preferred=FoodFor(c.Id).Preferred,LastManualTicks=manualEatTicks.TryGetValue(c.Id,out var mt)?mt:-1},
                     Enchant=enchantJobs.TryGetValue(c.Id,out var ej)?new SavedEnchant{Instance=ej.InstanceId,Definition=ej.Definition.Id}:null,
                     Attacks=attackCounts.TryGetValue(c.Id,out var ac)?ac:0, Regen=regenTicks.TryGetValue(c.Id,out var rg)?rg:0,
                     Effects = (effects.TryGetValue(c.Id,out var ef)?ef:Array.Empty<BackgroundXpEffect>()).Select(e => new SavedEffect { Source = e.SourceId, Skill = e.SkillId, Efficiency = e.Efficiency }).ToArray()
@@ -49,9 +50,9 @@ namespace Idlebound.Foundation
             Require(data.RefundInputs == catalogs.RefundCancelledInputs,"cancellation policy changed");
             Require(data.Characters != null && data.Characters.Length >= 1 && data.Characters.Length <= data.Slots,"roster");
             Require(data.Bank != null && data.Equipment != null && data.Kills != null,"missing collections");
-            var result = new GatheringSession(catalogs.Catalog,catalogs.curve,catalogs.Production,data.RefundInputs,catalogs.Equipment,catalogs.Combat,new SeededLootRoller(data.LootSeed),catalogs.Enchantments);
+            var result = new GatheringSession(catalogs.Catalog,catalogs.curve,catalogs.Production,data.RefundInputs,catalogs.Equipment,catalogs.Combat,new SeededLootRoller(data.LootSeed),catalogs.Enchantments,catalogs.Foods);
             result.state = new GameState(new RosterAccess(data.Slots),result.Skills,result.Activities);
-            result.loadouts.Clear(); result.vitals.Clear();
+            result.loadouts.Clear(); result.vitals.Clear(); result.foodSettings.Clear();
             foreach (var c in data.Characters)
             {
                 Require(c != null && c.Skills != null && c.Skills.All(s => s != null) && c.Effects != null,"character fields");
@@ -65,6 +66,13 @@ namespace Idlebound.Foundation
                 result.loadouts.Add(c.Id,new CharacterEquipment());
                 Require(c.Hp >= 0 && c.Hp <= result.Combat.Rules.PlayerMaxHp,"HP");
                 result.vitals.Add(c.Id,new CharacterVitals(result.Combat.Rules.PlayerMaxHp,c.Hp));
+                result.foodSettings.Add(c.Id,c.Food==null?new FoodSettings():new FoodSettings(c.Food.Enabled,c.Food.Threshold,c.Food.Preferred));
+                if(c.Food!=null)
+                {
+                    Require(c.Food.Preferred=="auto" || result.Foods.Definitions.Any(f=>f.ItemId==c.Food.Preferred),"food preference");
+                    Require(c.Food.LastManualTicks>=-1 && c.Food.LastManualTicks<=data.Ticks,"manual eating cursor");
+                    if(c.Food.LastManualTicks>=0)result.manualEatTicks.Add(c.Id,c.Food.LastManualTicks);
+                }
                 result.completedCycles.Add(c.Id,c.Cycles);
                 Require(c.Effects.All(e => e != null),"null effect");
                 result.SetEffectsAt(0,c.Id,c.Effects.Select(e => new BackgroundXpEffect(e.Source,e.Skill,e.Efficiency)));

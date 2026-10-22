@@ -72,6 +72,7 @@ namespace Idlebound.Foundation
             DiscardChangedJobs(before);
             partialTicks.Remove(characterId);
             encounters[characterId] = new CombatEncounter(monsterId, monster.MaxHp, profile.IntervalTicks, monster.AttackIntervalTicks);
+            AutoEat(characterId,health,inventory,null);
             error = null;
             return true;
         }
@@ -178,6 +179,7 @@ namespace Idlebound.Foundation
                     }
                     HealPulse(hp,regenBonus,ref regen);
                 }
+                if(Eligible(id,eligibleTicks,offline)>0)AutoEat(id,hp,nextInventory,receipt);
                 var skill = Characters.First(c => c.Id == id).Skills.First(s => s.SkillId == skillId);
                 curve.ApplyAward(skill.StoredXp, xp); // Preflight XP before any bank/HP/counter changes.
                 if (receipt != null)

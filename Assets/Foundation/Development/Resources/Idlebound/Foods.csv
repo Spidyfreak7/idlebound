@@ -1,0 +1,4 @@
+# Stage 8B-08 PROVISIONAL playtest healing; existing Cooking product IDs only.
+# itemId,hpRestored
+cooked-shrimp-item,8
+cooked-sardine-item,12
